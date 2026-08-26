@@ -29,15 +29,24 @@ The League rules that make a lane a lane are all here:
 - **Brush.** The green pockets hide you. Someone standing in brush is invisible
   unless you are in brush with them, or close enough to trip over them.
 - **Fog.** You see what your dots see. Everything else is dark.
+- **Cast times.** Every spell except the dashes roots you for a moment first and
+  paints its shape on the ground while it winds up. That wind-up is why a
+  skillshot can be dodged — walk off the line and it passes through empty grid.
 - **Recall.** `B` channels for five seconds and breaks the instant anything
   touches you.
-- **The shop opens in your fountain only.** So going home costs you the lane.
+- **The shop opens in your fountain only**, and opens by itself when the match
+  starts, so your first item is bought before minions spawn. Going home for the
+  next one costs you the lane.
+
+The camera sits close, the way a MOBA camera does — you see the fight you are in,
+not the whole map. The minimap is how you know what is happening elsewhere.
 
 ## Controls
 
 | | |
 |---|---|
-| Right click | Move. Right click an enemy dot to attack it. |
+| Right click | Move there. **Hold** it and your dot follows the cursor. |
+| Right click an enemy | Attack that dot until it dies. |
 | `Q` `W` `E` `R` | Abilities. Click to aim, right click to cancel. |
 | `Ctrl` + `Q/W/E/R` | Spend a skill point (or click the `+` on the icon). |
 | `A` then click | Attack-move: walk there, hit whatever you meet. |
@@ -45,6 +54,7 @@ The League rules that make a lane a lane are all here:
 | `B` | Recall. |
 | `P` | Shop (fountain only). |
 | `Space` | Snap the camera back to your dot. `Y` unlocks it. |
+| Scroll | Zoom in and out. |
 | `M` | Mute. |
 
 Ultimates unlock at level 6, 11 and 16. Other abilities cap at rank 5.

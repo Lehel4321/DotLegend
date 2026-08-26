@@ -131,6 +131,18 @@
     content: ""; position: absolute; inset: 5px; border-radius: 50%; background: var(--fill, var(--gold));
   }
 
+  /* the shop button: the way you find the shop without being told twice */
+  #shopBtn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    width: 74px; height: 50px; cursor: pointer; font-family: var(--mono);
+    background: #07070d; border: 1px solid var(--edge); color: var(--muted);
+  }
+  #shopBtn b { font-family: var(--display); font-size: 15px; color: var(--gold); line-height: 1; }
+  #shopBtn span { font-size: 7.5px; letter-spacing: 0.1em; }
+  #shopBtn.open { border-color: var(--gold); color: var(--ink); animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { background: #14120a; } }
+  @media (prefers-reduced-motion: reduce) { #shopBtn.open { animation: none; background: #14120a; } }
+
   /* stats + minimap */
   #stats { display: block; font-size: 10px; color: var(--muted); line-height: 1.5; white-space: nowrap; }
   #stats b { color: var(--ink); font-variant-numeric: tabular-nums; }
@@ -259,14 +271,16 @@
         <p class="tag">One lane · two nexuses · every unit is a dot</p>
         <div id="picks"></div>
         <div class="keys-grid">
-          <kbd>Right click</kbd><span>Move. Right click an enemy dot to <b>attack</b> it.</span>
+          <kbd>Right click</kbd><span>Move. <b>Hold</b> it and your dot follows the cursor.</span>
+          <kbd>Right click enemy</kbd><span>Attack that dot until it dies.</span>
           <kbd>Q W E R</kbd><span>Abilities. Click to aim, right click to cancel.</span>
           <kbd>Ctrl + Q/W/E/R</kbd><span>Spend a skill point (or click the <b>+</b>).</span>
           <kbd>A</kbd><span>Attack-move: walk there, hit whatever you meet.</span>
           <kbd>S</kbd><span>Stop.</span>
           <kbd>B</kbd><span>Recall — 5s channel, breaks on damage.</span>
           <kbd>P</kbd><span>Shop. Only opens in your fountain.</span>
-          <kbd>Space</kbd><span>Snap the camera back to your dot.</span>
+          <kbd>Space</kbd><span>Snap the camera back to your dot. <b>Y</b> unlocks it.</span>
+          <kbd>Scroll</kbd><span>Zoom the camera in and out.</span>
           <kbd>M</kbd><span>Mute.</span>
         </div>
         <p class="tag" style="max-width:52ch">Last-hit minions for gold. Outer turret first — the ones behind it
@@ -311,6 +325,10 @@
 
     <div class="cell"><div class="lbl">Abilities</div><div id="abilities"></div></div>
     <div class="cell"><div class="lbl">Items</div><div id="items"></div></div>
+    <div class="cell">
+      <div class="lbl">Gold</div>
+      <button id="shopBtn"><b id="shopBtnGold">500</b><span>SHOP · P</span></button>
+    </div>
     <div class="cell"><div id="stats"></div></div>
     <div class="cell"><canvas id="mini" width="248" height="56"></canvas></div>
   </div>
@@ -407,9 +425,9 @@ const MATCH = {
 const XP_FOR_LEVEL = (l) => Math.round(190 + 110 * l + 9 * l * l);
 
 const MINION = {
-  melee:  { hp: 460, ad: 13, range: 38,  ms: 92,  gold: 21, xp: 60,  r: 7,   armor: 2, aspd: 1.1 },
-  ranged: { hp: 320, ad: 24, range: 190, ms: 92,  gold: 15, xp: 44,  r: 6.5, armor: 0, aspd: 0.9 },
-  siege:  { hp: 900, ad: 42, range: 230, ms: 84,  gold: 46, xp: 96,  r: 9.5, armor: 8, aspd: 0.7 },
+  melee:  { hp: 460, ad: 13, range: 40,  ms: 66,  gold: 21, xp: 60,  r: 10,  armor: 2, aspd: 1.1 },
+  ranged: { hp: 320, ad: 24, range: 190, ms: 66,  gold: 15, xp: 44,  r: 9,   armor: 0, aspd: 0.9 },
+  siege:  { hp: 900, ad: 42, range: 230, ms: 60,  gold: 46, xp: 96,  r: 13,  armor: 8, aspd: 0.7 },
 };
 
 const TURRET_STATS = [
@@ -433,15 +451,15 @@ const CHAMPS = {
     name: "VECTOR", role: "Marksman", color: "#f2c230",
     blurb: "Long range, no health. Every fight is a spacing puzzle.",
     hp: 545, hpG: 92, mp: 340, mpG: 40, ad: 62, adG: 3.4, armor: 20, armorG: 3.8,
-    mr: 24, mrG: 1.4, ms: 142, aspd: 0.68, aspdG: 0.031, range: 210, ranged: true, r: 11,
+    mr: 24, mrG: 1.4, ms: 108, aspd: 0.68, aspdG: 0.031, range: 210, ranged: true, r: 13,
     hpReg: 5.5, mpReg: 7.5,
     tips: ["Q pierces everything in a line", "W is your only escape", "R can finish across the screen"],
     abils: [
       { key: "Q", name: "PIERCE", cd: [9, 8.2, 7.4, 6.6, 5.8], cost: 45, range: 760, aim: "line",
         desc: "A bolt through everything in a line.",
         dmg: (u, k) => 34 + 26 * k + 0.95 * ad(u),
-        cast(u, tx, ty) { lineShot(u, tx, ty, 760, 15, this.dmg(u, u.ranks[0]), "phys", { pierce: true, speed: 900, color: "#f2c230" }); } },
-      { key: "W", name: "SIDESTEP", cd: [16, 14.5, 13, 11.5, 10], cost: 40, range: 230, aim: "point",
+        cast(u, tx, ty) { lineShot(u, tx, ty, 760, 15, this.dmg(u, u.ranks[0]), "phys", { pierce: true, speed: 660, color: "#f2c230" }); } },
+      { key: "W", name: "SIDESTEP", cd: [16, 14.5, 13, 11.5, 10], cost: 40, range: 230, aim: "point", ct: 0,
         desc: "Hop 230 and move faster for 2s.",
         cast(u, tx, ty) { dashTo(u, tx, ty, 230, 620); buff(u, "ms", 0.28, 2); } },
       { key: "E", name: "OVERCLOCK", cd: [15, 14, 13, 12, 11], cost: 45, range: 0, aim: "self",
@@ -450,7 +468,7 @@ const CHAMPS = {
       { key: "R", name: "SNIPE", cd: [90, 80, 70], cost: 100, range: 1500, aim: "line", ult: true,
         desc: "A shot the length of the lane. First dot hit takes it all.",
         dmg: (u, k) => 170 + 110 * k + 1.25 * ad(u),
-        cast(u, tx, ty) { lineShot(u, tx, ty, 1500, 17, this.dmg(u, u.ranks[3]), "phys", { speed: 1600, color: "#fff2b0", big: true }); } },
+        cast(u, tx, ty) { lineShot(u, tx, ty, 1500, 17, this.dmg(u, u.ranks[3]), "phys", { speed: 1150, color: "#fff2b0", big: true }); } },
     ],
   },
 
@@ -458,14 +476,14 @@ const CHAMPS = {
     name: "PULSE", role: "Mage", color: "#b45bd8",
     blurb: "Zones the ground, then deletes whoever stayed on it.",
     hp: 620, hpG: 100, mp: 480, mpG: 56, ad: 53, adG: 2.7, armor: 22, armorG: 4,
-    mr: 30, mrG: 1.6, ms: 140, aspd: 0.62, aspdG: 0.018, range: 200, ranged: true, r: 11,
+    mr: 30, mrG: 1.6, ms: 106, aspd: 0.62, aspdG: 0.018, range: 200, ranged: true, r: 13,
     hpReg: 6, mpReg: 10, ap: true,
     tips: ["W slows the ground for 3s", "E blinks through terrain", "R is the whole teamfight"],
     abils: [
       { key: "Q", name: "BOLT", cd: [7, 6.4, 5.8, 5.2, 4.6], cost: 40, range: 700, aim: "line",
         desc: "A slowing bolt. Stops on the first dot.",
         dmg: (u, k) => 48 + 30 * k + 0.65 * ap(u),
-        cast(u, tx, ty) { lineShot(u, tx, ty, 700, 13, this.dmg(u, u.ranks[0]), "magic", { speed: 780, color: "#b45bd8", slow: [0.3, 1.2] }); } },
+        cast(u, tx, ty) { lineShot(u, tx, ty, 700, 13, this.dmg(u, u.ranks[0]), "magic", { speed: 560, color: "#b45bd8", slow: [0.3, 1.2] }); } },
       { key: "W", name: "FIELD", cd: [14, 13, 12, 11, 10], cost: 65, range: 620, aim: "point",
         desc: "A pool that burns and slows for 3s.",
         cast(u, tx, ty) {
@@ -473,7 +491,7 @@ const CHAMPS = {
           G.zones.push({ x: tx, y: ty, r: 92, team: u.team, owner: u.id, t: 3, tick: 0,
             dmg: 13 + 8 * k + 0.10 * ap(u), slow: 0.35, color: "#b45bd8" });
         } },
-      { key: "E", name: "BLINK", cd: [20, 18.5, 17, 15.5, 14], cost: 60, range: 320, aim: "point",
+      { key: "E", name: "BLINK", cd: [20, 18.5, 17, 15.5, 14], cost: 60, range: 320, aim: "point", ct: 0,
         desc: "Blink 320. Terrain does not stop you.",
         cast(u, tx, ty) { blinkTo(u, tx, ty, 320); } },
       { key: "R", name: "NOVA", cd: [100, 88, 76], cost: 120, range: 230, aim: "self", ult: true,
@@ -491,7 +509,7 @@ const CHAMPS = {
     name: "BULWARK", role: "Fighter", color: "#35c05a",
     blurb: "Walks in, and the fight happens where it lands.",
     hp: 790, hpG: 132, mp: 320, mpG: 38, ad: 68, adG: 4, armor: 38, armorG: 5.4,
-    mr: 32, mrG: 1.6, ms: 158, aspd: 0.66, aspdG: 0.026, range: 95, ranged: false, r: 12,
+    mr: 32, mrG: 1.6, ms: 118, aspd: 0.66, aspdG: 0.026, range: 95, ranged: false, r: 14,
     hpReg: 9, mpReg: 7,
     tips: ["E charges in and stuns", "W is a shield, not a heal", "R hits everything around you"],
     abils: [
@@ -499,13 +517,13 @@ const CHAMPS = {
         desc: "A swing in an arc. Heals per dot hit.",
         dmg: (u, k) => 42 + 28 * k + 1.05 * ad(u),
         cast(u, tx, ty) {
-          const hit = cone(u, tx, ty, 130, 1.5, this.dmg(u, u.ranks[0]), "phys", { color: "#35c05a" });
+          const hit = cone(u, tx, ty, 145, 0.85, this.dmg(u, u.ranks[0]), "phys", { color: "#35c05a" });
           if (hit) heal(u, 8 + 5 * u.ranks[0] + 0.12 * ad(u));
         } },
       { key: "W", name: "GUARD", cd: [15, 14, 13, 12, 11], cost: 50, range: 0, aim: "self",
         desc: "A shield for 3s.",
         cast(u) { shield(u, 80 + 55 * u.ranks[1] + 0.10 * u.maxHp, 3); } },
-      { key: "E", name: "CHARGE", cd: [17, 16, 15, 14, 13], cost: 55, range: 340, aim: "point",
+      { key: "E", name: "CHARGE", cd: [17, 16, 15, 14, 13], cost: 55, range: 340, aim: "point", ct: 0.1,
         desc: "Charge. The first dot you hit is stunned.",
         dmg: (u, k) => 50 + 32 * k + 0.7 * ad(u),
         cast(u, tx, ty) {
@@ -532,7 +550,7 @@ const ITEMS = [
   { id: "blade",  name: "Long Blade",   price: 350,  color: "#e0334a", stats: { ad: 12 },                    txt: "+12 attack damage" },
   { id: "tome",   name: "Amp Tome",     price: 400,  color: "#b45bd8", stats: { ap: 22 },                    txt: "+22 ability power" },
   { id: "ruby",   name: "Ruby Shard",   price: 400,  color: "#35c05a", stats: { hp: 180 },                   txt: "+180 health" },
-  { id: "boots",  name: "Boots",        price: 300,  color: "#23b0c4", stats: { ms: 32 },                    txt: "+32 move speed" },
+  { id: "boots",  name: "Boots",        price: 300,  color: "#23b0c4", stats: { ms: 24 },                    txt: "+24 move speed" },
   { id: "cloak",  name: "Iron Cloak",   price: 450,  color: "#7c7a95", stats: { armor: 18, mr: 14 },         txt: "+18 armor, +14 magic resist" },
 
   { id: "fang",   name: "Bloodfang",    price: 2700, color: "#e0334a", stats: { ad: 45, lifesteal: 0.14 },   txt: "+45 AD, 14% lifesteal" },
@@ -540,7 +558,7 @@ const ITEMS = [
   { id: "void",   name: "Voidshard",    price: 2650, color: "#b45bd8", stats: { ap: 85, mp: 260 },           txt: "+85 AP, +260 mana" },
   { id: "plate",  name: "Bulwark Plate",price: 2700, color: "#35c05a", stats: { hp: 420, armor: 45 },        txt: "+420 health, +45 armor" },
   { id: "aegis",  name: "Aegis",        price: 2400, color: "#4a7bf0", stats: { hp: 280, mr: 50, hpReg: 8 }, txt: "+280 health, +50 MR, regen" },
-  { id: "swift",  name: "Swiftboots",   price: 900,  color: "#23b0c4", stats: { ms: 78 },                    txt: "+78 move speed" },
+  { id: "swift",  name: "Swiftboots",   price: 900,  color: "#23b0c4", stats: { ms: 58 },                    txt: "+58 move speed" },
   { id: "hourgl", name: "Hourglass",    price: 2500, color: "#ffc53d", stats: { ap: 55, armor: 35, hp: 150 },txt: "+55 AP, +35 armor, +150 HP" },
 ];
 const ITEM_BY_ID = Object.fromEntries(ITEMS.map((i) => [i.id, i]));
@@ -558,6 +576,7 @@ const G = {
   wave: 0, nextWave: MATCH.firstWave,
   kills: [0, 0], nexusDown: -1,
   cam: { x: 0, y: 0, lock: true, shake: 0 },
+  zoom: 1.85,              // the camera sits close, the way a MOBA camera does
   mouse: { sx: 0, sy: 0, x: 0, y: 0, down: false },
   armed: -1,               // ability index waiting for a click
   shopOpen: false, muted: false,
@@ -566,6 +585,9 @@ const G = {
 };
 
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+// the visible world, in world units — everything camera-shaped goes through these
+const viewW = () => G.view.w / G.zoom;
+const viewH = () => G.view.h / G.zoom;
 const dist2 = (a, b) => { const dx = a.x - b.x, dy = a.y - b.y; return dx * dx + dy * dy; };
 const dist = (a, b) => Math.sqrt(dist2(a, b));
 const len = (x, y) => Math.sqrt(x * x + y * y);
@@ -598,7 +620,7 @@ function makeChamp(team, key, isBot) {
   const u = addUnit({
     kind: "champ", team, champ: key, C, bot: !!isBot,
     x: FOUNTAIN[team].x, y: FOUNTAIN[team].y, r: C.r,
-    level: 1, xp: 0, gold: MATCH.startGold, points: 1,
+    level: 1, xp: 0, gold: MATCH.startGold, points: 1, inFountain: true,
     ranks: [0, 0, 0, 0], cds: [0, 0, 0, 0],
     items: [], k: 0, d: 0, a: 0, cs: 0,
     dead: false, respawn: 0, recall: 0, vision: 300,
@@ -829,7 +851,7 @@ function damage(src, tgt, raw, type, opt) {
 
 function die(u, killer) {
   if (u.dead) return;
-  u.dead = true; u.hp = 0;
+  u.dead = true; u.hp = 0; u.casting = null;
   G.fx.push({ kind: "pop", x: u.x, y: u.y, r: u.r, t: 0.35, life: 0.35, color: unitColor(u) });
   blip(u.kind === "champ" ? 120 : 200, 0.09, u.kind === "champ" ? "sawtooth" : "square");
 
@@ -861,7 +883,7 @@ function die(u, killer) {
   // a champion
   u.d++;
   u.respawn = MATCH.respawnBase + u.level * 1.8;
-  u.recall = 0; u.path = null; u.target = null; u.order = null; u.dash = null;
+  u.recall = 0; u.path = null; u.target = null; u.order = null; u.dash = null; u.casting = null;
   const team = 1 - u.team;
   G.kills[team]++;
   if (killer && isChamp(killer)) {
@@ -927,7 +949,7 @@ function autoAttack(u, tgt) {
   const ranged = u.kind === "champ" ? u.C.ranged : (u.stat.range > 90);
   if (ranged) {
     G.projs.push({
-      x: u.x, y: u.y, tx: tgt.x, ty: tgt.y, homing: tgt.id, speed: u.kind === "turret" ? 900 : 520,
+      x: u.x, y: u.y, tx: tgt.x, ty: tgt.y, homing: tgt.id, speed: u.kind === "turret" ? 700 : 440,
       team: u.team, owner: u.id, dmg, type: "phys", r: u.kind === "turret" ? 6 : 4.5,
       color: u.kind === "turret" ? TEAM_COLOR[u.team] : unitColor(u), single: true,
     });
@@ -1015,8 +1037,11 @@ function float(u, txt, color) { G.floats.push({ x: u.x + rand(10) - 5, y: u.y - 
 
 function canCast(u, i) {
   const A = u.C.abils[i];
-  return !u.dead && u.ranks[i] > 0 && u.cds[i] <= 0 && u.mp >= A.cost && u.stun <= 0 && u.recall <= 0;
+  return !u.dead && !u.casting && u.ranks[i] > 0 && u.cds[i] <= 0 && u.mp >= A.cost && u.stun <= 0 && u.recall <= 0;
 }
+
+// how long the caster is rooted before the spell actually goes off
+const castTime = (A) => A.ct !== undefined ? A.ct : (A.ult ? 0.45 : 0.28);
 
 function tryCast(u, i, tx, ty) {
   if (!canCast(u, i)) return false;
@@ -1029,8 +1054,14 @@ function tryCast(u, i, tx, ty) {
     }
   }
   u.mp -= A.cost;
-  u.cds[i] = A.cd[Math.max(0, u.ranks[i] - 1)] * (1 - 0);
-  A.cast(u, tx, ty);
+  u.cds[i] = A.cd[Math.max(0, u.ranks[i] - 1)];
+  u.facing = Math.atan2(ty - u.y, tx - u.x);
+
+  const ct = castTime(A);
+  if (ct <= 0) { A.cast(u, tx, ty); return true; }
+  // the wind-up: you are rooted, and everyone can see the shape coming
+  u.casting = { i, tx, ty, t: ct, total: ct };
+  u.path = null; u.order = null; u.target = null;
   return true;
 }
 
@@ -1132,7 +1163,8 @@ function orderMove(u, x, y, attackMove) {
   if (u.dead) return;
   u.order = { kind: attackMove ? "amove" : "move", x, y };
   u.target = null;
-  u.path = findPath(u.x, u.y, x, y) || [{ x, y }];
+  // nothing in the way: walk straight at it, no pathfinder, no lag on the order
+  u.path = clearLine(u, { x, y }) ? [{ x, y }] : (findPath(u.x, u.y, x, y) || [{ x, y }]);
 }
 function orderAttack(u, tgt) {
   if (u.dead || !tgt) return;
@@ -1187,7 +1219,17 @@ function stepUnit(u, dt) {
     }
   }
 
-  if (u.stun > 0) return;
+  if (u.stun > 0) { u.casting = null; return; }
+
+  // ---- a spell in its wind-up roots you until it goes off
+  if (u.casting) {
+    u.casting.t -= dt;
+    if (u.casting.t <= 0) {
+      const c = u.casting; u.casting = null;
+      u.C.abils[c.i].cast(u, c.tx, c.ty);
+    }
+    return;
+  }
 
   // ---- dashes move through everything but terrain
   if (u.dash) {
@@ -1225,8 +1267,8 @@ function stepUnit(u, dt) {
       if (u.atkCd <= 0) {
         const mult = 1 + Math.min(0.5, u.ramp * 0.16);
         u.atkCd = 1 / u.stat.aspd;
-        G.projs.push({ x: u.x, y: u.y - 8, homing: t.id, speed: 620, team: u.team, owner: u.id,
-          dmg: u.stat.ad * mult, type: "phys", r: 6, color: TEAM_COLOR[u.team], single: true });
+        G.projs.push({ x: u.x, y: u.y - 8, homing: t.id, speed: 560, team: u.team, owner: u.id,
+          dmg: u.stat.ad * mult, type: "phys", r: 7, color: TEAM_COLOR[u.team], single: true });
         u.ramp++;
       }
     } else { u.lastShot = null; u.ramp = 0; }
@@ -1445,32 +1487,38 @@ function botThink(u, dt) {
   const myTurret = frontTurret(u.team), foeTurret = frontTurret(1 - u.team);
   const myWave = nearestMinion(u, u.team, 2400);
   const foeWave = nearestMinion(u, 1 - u.team, 620);
-  const underFoeTurret = foeTurret && len(foeTurret.x - u.x, foeTurret.y - u.y) < foeTurret.stat.range + 30;
   const alliesNear = G.units.filter((o) => o.kind === "minion" && o.team === u.team && !o.dead && len(o.x - u.x, o.y - u.y) < 300).length;
 
-  // --- never stand under a turret without a wave in front of you
+  // The turret's reach, plus a margin. Stepping to the very edge of it and back
+  // out again just donates a shot per trip, so the no-go zone is deliberately
+  // wider than the turret's actual range and nothing below crosses it alone.
+  const guarded = alliesNear < 2;
+  const safeR = foeTurret ? foeTurret.stat.range + 70 : 0;
+  const distTurret = foeTurret ? len(foeTurret.x - u.x, foeTurret.y - u.y) : Infinity;
+  const forbidden = (x, y) => guarded && foeTurret && len(foeTurret.x - x, foeTurret.y - y) < safeR;
+
   const dir = u.team === BLUE ? 1 : -1;          // the way this team pushes
-  if (underFoeTurret && alliesNear === 0) {
-    orderMove(u, clamp(u.x - dir * 300, TILE * 6, WORLD_W - TILE * 6), LANE_ROW * TILE + TILE / 2);
+  if (guarded && distTurret < safeR) {
+    // walk straight back out along the lane, far enough not to bounce in again
+    orderMove(u, clamp(foeTurret.x - dir * (safeR + 110), TILE * 6, WORLD_W - TILE * 6), LANE_ROW * TILE + TILE / 2);
     return;
   }
 
   // --- fight?
   const power = (c) => (c.hp / c.maxHp) * 0.55 + (c.level / MATCH.xpCap) * 0.25 + (c.items.length / 6) * 0.2;
   const wantFight = foeSeen && dFoe < 420 && (power(u) > power(me) + 0.08 || me.hp / me.maxHp < 0.35)
-                    && !(underFoeTurret && alliesNear === 0);
+                    && !(guarded && distTurret < safeR);
 
   if (foeSeen && dFoe < 520) {
     castRotation(u, me, wantFight, dFoe);
   }
-
-  if (wantFight) {
-    // diving is allowed, but only with a wave to hold the turret's attention
-    const dive = foeTurret && len(foeTurret.x - me.x, foeTurret.y - me.y) < foeTurret.stat.range;
-    if (!dive || alliesNear >= 2 || me.hp / me.maxHp < 0.18) { orderAttack(u, me); return; }
+  // chasing a kill into the no-go zone is the same mistake as farming into it
+  if (wantFight && forbidden(me.x, me.y) && me.hp / me.maxHp > 0.18) {
     orderMove(u, u.x - dir * 200, laneYc, true);
     return;
   }
+
+  if (wantFight) { orderAttack(u, me); return; }
   if (foeSeen && dFoe < 260 && power(u) < power(me) - 0.05) {
     const away = Math.atan2(u.y - me.y, u.x - me.x);
     orderMove(u, u.x + Math.cos(away) * 300, u.y + Math.sin(away) * 300);
@@ -1478,12 +1526,14 @@ function botThink(u, dt) {
   }
 
   // --- farm: last hit if you can, otherwise hold the wave
-  if (foeWave) {
+  if (foeWave && !forbidden(foeWave.x, foeWave.y)) {
     const killable = G.units.find((o) => o.kind === "minion" && o.team !== u.team && !o.dead
+      && !forbidden(o.x, o.y)
       && len(o.x - u.x, o.y - u.y) < attackRange(u) + 130 && o.hp <= u.stat.ad * 1.15);
     const t = killable || foeWave;
+    // stop at the edge of your own reach rather than walking on top of the wave
     if (len(t.x - u.x, t.y - u.y) < attackRange(u) + 40) orderAttack(u, t);
-    else orderMove(u, t.x, t.y, true);
+    else orderMove(u, t.x - dir * attackRange(u) * 0.7, t.y, true);
     return;
   }
 
@@ -1493,7 +1543,9 @@ function botThink(u, dt) {
   const waveNearTurret = push && G.units.some((o) => o.kind === "minion" && o.team === u.team && !o.dead
     && Math.abs(o.x - push.x) < push.stat.range + 60);
 
-  if (push && (waveNearTurret || !foeAlive)) { orderMove(u, push.x, push.y, true); return; }
+  if (push && (waveNearTurret || !foeAlive) && !(guarded && push === foeTurret)) {
+    orderMove(u, push.x, push.y, true); return;
+  }
   if (myWave) { orderMove(u, myWave.x + dir * 30, laneY, true); return; }
 
   // no wave anywhere: wait at your own front turret rather than wander into theirs
@@ -1642,12 +1694,13 @@ window.addEventListener("resize", resize);
 function camUpdate(dt) {
   const me = G.me;
   if (!me) return;
+  const vw = viewW(), vh = viewH();
   if (G.cam.lock) {
-    G.cam.x += (me.x - G.view.w / 2 - G.cam.x) * Math.min(1, dt * 9);
-    G.cam.y += (me.y - G.view.h / 2 - G.cam.y) * Math.min(1, dt * 9);
+    G.cam.x += (me.x - vw / 2 - G.cam.x) * Math.min(1, dt * 10);
+    G.cam.y += (me.y - vh / 2 - G.cam.y) * Math.min(1, dt * 10);
   }
-  G.cam.x = clamp(G.cam.x, 0, Math.max(0, WORLD_W - G.view.w));
-  G.cam.y = clamp(G.cam.y, -Math.max(0, (G.view.h - WORLD_H) / 2), Math.max(0, WORLD_H - G.view.h));
+  G.cam.x = clamp(G.cam.x, 0, Math.max(0, WORLD_W - vw));
+  G.cam.y = clamp(G.cam.y, -Math.max(0, (vh - WORLD_H) / 2), Math.max(0, WORLD_H - vh));
   if (G.cam.shake > 0) G.cam.shake = Math.max(0, G.cam.shake - dt * 40);
 }
 
@@ -1659,16 +1712,17 @@ function draw() {
 
   ctx.fillStyle = "#05050a"; ctx.fillRect(0, 0, w, h);
   ctx.save();
-  ctx.translate(Math.round(ox), Math.round(oy));
+  ctx.scale(G.zoom, G.zoom);
+  ctx.translate(ox, oy);
 
   // --- ground
   ctx.drawImage(bg, 0, 0);
 
   // --- fog: darken the ground, then punch a hole around everything we own
   ctx.save();
-  ctx.beginPath(); ctx.rect(G.cam.x, G.cam.y, w, h); ctx.clip();
-  const fog = fogCanvas(w, h);
-  ctx.drawImage(fog, G.cam.x, G.cam.y);
+  const vw = Math.ceil(viewW()), vh = Math.ceil(viewH());
+  ctx.beginPath(); ctx.rect(G.cam.x, G.cam.y, vw, vh); ctx.clip();
+  ctx.drawImage(fogCanvas(vw, vh), G.cam.x, G.cam.y);
   ctx.restore();
 
   // --- zones under everything
@@ -1689,8 +1743,9 @@ function draw() {
     ctx.globalAlpha = 1;
   }
 
-  // --- aiming
+  // --- aiming, and every wind-up on the board
   drawAim();
+  drawCasts();
 
   // --- units, structures under dots
   const order = [...G.units].sort((a, b) => rank(a) - rank(b));
@@ -1718,7 +1773,7 @@ function draw() {
 }
 
 const rank = (u) => u.kind === "nexus" ? 0 : u.kind === "turret" ? 1 : u.kind === "minion" ? 2 : 3;
-const inView = (x, y, pad) => x > G.cam.x - pad && x < G.cam.x + G.view.w + pad && y > G.cam.y - pad && y < G.cam.y + G.view.h + pad;
+const inView = (x, y, pad) => x > G.cam.x - pad && x < G.cam.x + viewW() + pad && y > G.cam.y - pad && y < G.cam.y + viewH() + pad;
 
 let fogCv = null;
 function fogCanvas(w, h) {
@@ -1766,7 +1821,7 @@ function drawUnit(u) {
     ctx.beginPath(); ctx.arc(u.x, u.y, u.r, 0, 7); ctx.fill();
     ctx.fillStyle = "#05050a";
     ctx.beginPath(); ctx.arc(u.x, u.y, u.r * 0.42, 0, 7); ctx.fill();
-    hpBar(u, 62, -u.r - 14);
+    hpBar(u, 54, -u.r - 13);
     return;
   }
 
@@ -1796,7 +1851,7 @@ function drawUnit(u) {
       ctx.beginPath(); ctx.arc(u.x, u.y, u.stat.range, 0, 7); ctx.fill();
     }
     ctx.restore();
-    hpBar(u, 46, -u.r - 12);
+    hpBar(u, 40, -u.r - 11);
     return;
   }
 
@@ -1811,7 +1866,7 @@ function drawUnit(u) {
       ctx.strokeStyle = "#ffc53d"; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(u.x, u.y, u.r + 3, 0, 7); ctx.stroke();
     }
-    hpBar(u, 20, -u.r - 7, true);
+    hpBar(u, 22, -u.r - 7, true);
     return;
   }
 
@@ -1849,17 +1904,17 @@ function drawUnit(u) {
   }
   ctx.globalAlpha = 1;
 
-  hpBar(u, 54, -u.r - 15);
+  hpBar(u, 42, -u.r - 13);
   // name + level
-  ctx.font = "700 9px ui-monospace, monospace";
+  ctx.font = `700 ${(11 / G.zoom).toFixed(1)}px ui-monospace, monospace`;
   ctx.textAlign = "center";
   ctx.fillStyle = u === G.me ? "#eceaf4" : "#9b98b4";
-  ctx.fillText(u.champ + " " + u.level, u.x, u.y - u.r - 19);
+  ctx.fillText(u.champ + " " + u.level, u.x, u.y - u.r - 17);
   ctx.textAlign = "left";
 }
 
 function hpBar(u, w, dy, thin) {
-  const h = thin ? 3 : 5;
+  const h = thin ? 3 : 4;
   const x = u.x - w / 2, y = u.y + dy;
   ctx.fillStyle = "#05050a"; ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
   ctx.fillStyle = "#1a1a26"; ctx.fillRect(x, y, w, h);
@@ -1908,6 +1963,44 @@ function drawAim() {
   ctx.restore();
 }
 
+// A spell in its wind-up draws its own shape on the ground. This is the whole
+// reason a skillshot can be dodged: you get to see it before it exists.
+function drawCasts() {
+  for (const u of G.units) {
+    if (!u.casting || u.dead || !isChamp(u)) continue;
+    if (!visibleTo(u, BLUE)) continue;
+    const A = u.C.abils[u.casting.i];
+    const p = 1 - u.casting.t / u.casting.total;
+    const col = u.team === BLUE ? "#4a7bf0" : "#ff2e4d";
+    const a = Math.atan2(u.casting.ty - u.y, u.casting.tx - u.x);
+
+    ctx.save();
+    ctx.globalAlpha = 0.16 + p * 0.30;
+    ctx.strokeStyle = col; ctx.fillStyle = col;
+    if (A.aim === "line") {
+      ctx.lineWidth = 18; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(u.x, u.y);
+      ctx.lineTo(u.x + Math.cos(a) * A.range, u.y + Math.sin(a) * A.range);
+      ctx.stroke();
+    } else if (A.aim === "point") {
+      const r = A.name === "FIELD" ? 92 : 34;
+      ctx.beginPath(); ctx.arc(u.casting.tx, u.casting.ty, r, 0, 7); ctx.fill();
+      ctx.globalAlpha = 0.6; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(u.casting.tx, u.casting.ty, r * p, 0, 7); ctx.stroke();
+    } else if (A.range > 0) {
+      ctx.beginPath(); ctx.arc(u.x, u.y, A.range, 0, 7); ctx.fill();
+      ctx.globalAlpha = 0.7; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(u.x, u.y, A.range * p, 0, 7); ctx.stroke();
+    }
+    ctx.restore();
+
+    // the cast bar, so the wind-up has a clock on it
+    const w = 34, x = u.x - w / 2, y = u.y + u.r + 7;
+    ctx.fillStyle = "rgba(5,5,10,0.8)"; ctx.fillRect(x - 1, y - 1, w + 2, 5);
+    ctx.fillStyle = "#ffc53d"; ctx.fillRect(x, y, w * p, 3);
+  }
+}
+
 function drawFx() {
   for (const f of G.fx) {
     const k = 1 - f.t / f.life;
@@ -1931,7 +2024,7 @@ function drawFx() {
       ctx.strokeStyle = f.color; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(x, y, 12 + k * 6, 0, 7); ctx.stroke();
     } else if (f.kind === "cone") {
-      ctx.fillStyle = f.color; ctx.globalAlpha *= 0.35;
+      ctx.fillStyle = f.color; ctx.globalAlpha *= 0.28;
       ctx.beginPath(); ctx.moveTo(x, y);
       ctx.arc(x, y, f.range, f.a - f.half, f.a + f.half); ctx.closePath(); ctx.fill();
     }
@@ -1944,9 +2037,9 @@ function drawFloats() {
   for (const f of G.floats) {
     const k = 1 - f.t / f.life;
     ctx.globalAlpha = Math.max(0, 1 - k * k);
-    ctx.font = "900 13px " + getComputedStyle(document.body).getPropertyValue("--display");
+    ctx.font = `900 ${(14 / G.zoom).toFixed(1)}px Arial Black, Arial, sans-serif`;
     ctx.fillStyle = f.color;
-    ctx.fillText(f.txt, f.x, f.y - k * 26);
+    ctx.fillText(f.txt, f.x, f.y - k * (30 / G.zoom));
   }
   ctx.globalAlpha = 1;
   ctx.textAlign = "left";
@@ -1980,7 +2073,7 @@ function drawMini() {
   }
   // the viewport box
   mctx.strokeStyle = "rgba(236,234,244,0.35)"; mctx.lineWidth = 1;
-  mctx.strokeRect(G.cam.x * sx, G.cam.y * sy, G.view.w * sx, G.view.h * sy);
+  mctx.strokeRect(G.cam.x * sx, G.cam.y * sy, viewW() * sx, viewH() * sy);
 }
 
 /* ==================================================================== *
@@ -2016,7 +2109,9 @@ const el = {
   veil: $("veil"), veilN: $("veilN"), menu: $("menu"), picks: $("picks"),
   shop: $("shop"), shopGrid: $("shopGrid"), shopGold: $("shopGold"), shopSlots: $("shopSlots"),
   over: $("over"), overTitle: $("overTitle"), overLine: $("overLine"), again: $("again"),
+  shopBtn: $("shopBtn"), shopBtnGold: $("shopBtnGold"),
 };
+el.shopBtn.onclick = () => toggleShop();
 
 function say(html, cls) {
   const d = document.createElement("div");
@@ -2109,6 +2204,10 @@ function updateHud() {
   const s = Math.floor(G.clock);
   el.clock.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
+  el.shopBtnGold.textContent = Math.floor(me.gold);
+  el.shopBtn.classList.toggle("open", me.inFountain && !G.shopOpen && me.items.length < 6
+    && me.gold >= Math.min(...ITEMS.map((i) => i.price)));
+
   el.veil.classList.toggle("on", me.dead);
   if (me.dead) el.veilN.textContent = Math.ceil(me.respawn);
 }
@@ -2154,7 +2253,10 @@ function refreshShop() {
 
 function toggleShop(force) {
   const open = force === undefined ? !G.shopOpen : force;
-  if (open && (!G.me || !G.me.inFountain)) { say("Shop only opens in your fountain", "cHot"); return; }
+  if (open && (!G.me || !G.me.inFountain)) {
+    say("The shop is in your fountain — press <b>B</b> to recall", "cHot");
+    return;
+  }
   G.shopOpen = open;
   el.shop.hidden = !open;
   if (open) refreshShop();
@@ -2166,7 +2268,7 @@ function toggleShop(force) {
 
 function toWorld(e) {
   const r = board.getBoundingClientRect();
-  return { x: e.clientX - r.left + G.cam.x, y: e.clientY - r.top + G.cam.y };
+  return { x: G.cam.x + (e.clientX - r.left) / G.zoom, y: G.cam.y + (e.clientY - r.top) / G.zoom };
 }
 
 board.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -2184,6 +2286,7 @@ board.addEventListener("mousedown", (e) => {
     e.preventDefault();
     if (G.armed >= 0) { G.armed = -1; return; }
     if (G.me.dead) return;
+    G.rmb = true; G.holdT = 0.12;
     const t = unitUnder(p.x, p.y, 1 - G.me.team);
     if (t) { orderAttack(G.me, t); clickMark(t.x, t.y, "#ff2e4d"); }
     else { orderMove(G.me, p.x, p.y, G.pendingAmove); clickMark(p.x, p.y, G.pendingAmove ? "#ffc53d" : "#3dff88"); }
@@ -2205,6 +2308,21 @@ board.addEventListener("mousedown", (e) => {
 });
 
 function clickMark(x, y, color) { G.clickFx = { x, y, color, t: 0.4 }; }
+
+// held right button: keep re-issuing the move so the dot follows the cursor
+window.addEventListener("mouseup", (e) => { if (e.button === 2) G.rmb = false; });
+board.addEventListener("mouseleave", () => { G.rmb = false; });
+
+function stepHeldMove(dt) {
+  if (!G.rmb || G.phase !== "play" || G.shopOpen || G.armed >= 0) return;
+  const me = G.me;
+  if (!me || me.dead || me.recall > 0) return;
+  G.holdT -= dt;
+  if (G.holdT > 0) return;
+  G.holdT = 0.07;
+  if (len(G.mouse.x - me.x, G.mouse.y - me.y) < 12) return;
+  orderMove(me, G.mouse.x, G.mouse.y, false);
+}
 
 function unitUnder(x, y, team) {
   let best = null, bd = 26;
@@ -2267,8 +2385,14 @@ mini.addEventListener("mousedown", (e) => {
   const x = (e.clientX - r.left) / r.width * WORLD_W;
   const y = (e.clientY - r.top) / r.height * WORLD_H;
   G.cam.lock = false;
-  G.cam.x = x - G.view.w / 2; G.cam.y = y - G.view.h / 2;
+  G.cam.x = x - viewW() / 2; G.cam.y = y - viewH() / 2;
 });
+
+// wheel zoom, within the range where the game still reads
+board.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  G.zoom = clamp(G.zoom * (e.deltaY > 0 ? 0.9 : 1.1), 1.25, 2.8);
+}, { passive: false });
 
 /* ==================================================================== *
  * 19. MATCH
@@ -2305,7 +2429,7 @@ function startMatch(champKey) {
   G.bot = makeChamp(RED, others[randInt(others.length)], true);
 
   G.cam.lock = true;
-  G.cam.x = G.me.x - G.view.w / 2; G.cam.y = G.me.y - G.view.h / 2;
+  G.cam.x = G.me.x - viewW() / 2; G.cam.y = G.me.y - viewH() / 2;
 
   buildAbilityBar();
   buildShop();
@@ -2315,6 +2439,7 @@ function startMatch(champKey) {
   resize();
   say(`<b class="cRed">${G.bot.champ}</b> is on the other side`, "cGold");
   callout("MINIONS IN " + MATCH.firstWave + "s", "#ffc53d");
+  toggleShop(true);                      // you spawn in the fountain: buy your first item
   blip(440, 0.12, "triangle", 0.08);
 }
 
@@ -2384,7 +2509,7 @@ function frame(ts) {
   // the HUD changes height as it fills in; the canvas has to follow or circles turn to ellipses
   if (board.clientWidth !== G.view.w || board.clientHeight !== G.view.h) resize();
 
-  if (G.phase === "play" && !G.shopOpen) stepGame(dt);
+  if (G.phase === "play" && !G.shopOpen) { stepHeldMove(dt); stepGame(dt); }
   if (G.phase !== "menu") {
     camUpdate(dt);
     draw();
