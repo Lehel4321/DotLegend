@@ -1,0 +1,2426 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Dot Legend</title>
+
+<style>
+  /* ------------------------------------------------------------------ *
+   * DOT STYLE — the same tokens as the dot world: near-black ground,
+   * one panel grey, one edge, one ink, and three signal colours.
+   * Everything on the board is a dot on a seamed grid.
+   * ------------------------------------------------------------------ */
+  :root {
+    --ground: #05050a;
+    --panel: #0b0b12;
+    --edge: #1e1e2e;
+    --ink: #eceaf4;
+    --muted: #7c7a95;
+    --hot: #ff2e4d;
+    --safe: #3dff88;
+    --gold: #ffc53d;
+    --blue: #4a7bf0;
+    --red: #e0334a;
+    --display: "Arial Black", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%; margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--mono); overflow: hidden; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #stage { height: 100dvh; display: flex; flex-direction: column; }
+  #frame { position: relative; flex: 1; min-height: 0; line-height: 0; }
+  #board { display: block; width: 100%; height: 100%; cursor: crosshair; }
+
+  /* the faint scanline the dot world wears */
+  #scan {
+    position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(to bottom, rgba(0,0,0,0.06) 0 1px, transparent 1px 4px);
+  }
+
+  /* ---------------- top strip: the match itself ---------------- */
+  #top {
+    position: absolute; top: 0; left: 0; right: 0; height: 34px;
+    display: flex; align-items: center; justify-content: center; gap: 18px;
+    background: linear-gradient(to bottom, rgba(5,5,10,0.94), rgba(5,5,10,0));
+    font-size: 11px; letter-spacing: 0.12em; pointer-events: none;
+  }
+  #top b { font-family: var(--display); font-size: 15px; font-variant-numeric: tabular-nums; }
+  .score { display: flex; align-items: center; gap: 7px; }
+  .score i { width: 9px; height: 9px; border-radius: 50%; font-style: normal; }
+  .score.blue i { background: var(--blue); }
+  .score.red i { background: var(--red); }
+  #clock { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* ---------------- bottom bar: you ---------------- */
+  #bar {
+    flex: none; display: flex; align-items: stretch; gap: 10px;
+    padding: 8px 10px; background: var(--panel); border-top: 1px solid var(--edge);
+  }
+  #bar.hidden { display: none; }
+
+  .cell { display: flex; flex-direction: column; gap: 5px; justify-content: center; }
+  .lbl { font-size: 8.5px; letter-spacing: 0.16em; color: var(--muted); line-height: 1; }
+
+  /* portrait: your champion, as a dot */
+  #portrait {
+    position: relative; width: 58px; height: 58px; flex: none;
+    border: 1px solid var(--edge); background: #07070d;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #portDot { width: 26px; height: 26px; border-radius: 50%; background: var(--blue); }
+  #portLvl {
+    position: absolute; right: -1px; bottom: -1px; min-width: 20px; padding: 1px 3px;
+    background: var(--gold); color: #05050a; font-family: var(--display); font-size: 12px;
+    text-align: center; line-height: 1.25;
+  }
+  #portDead { position: absolute; inset: 0; background: rgba(5,5,10,0.82); color: var(--hot);
+    display: none; align-items: center; justify-content: center; font-family: var(--display); font-size: 20px; }
+  #portrait.dead #portDead { display: flex; }
+
+  /* vitals */
+  #vitals { flex: 1 1 200px; min-width: 140px; max-width: 340px; }
+  .vbar { position: relative; height: 15px; background: #12121b; border: 1px solid var(--edge); overflow: hidden; }
+  .vbar i { position: absolute; inset: 0 100% 0 0; transition: right 0.09s linear; }
+  .vbar u { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 9.5px; text-decoration: none; letter-spacing: 0.06em; font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 3px #000; }
+  #hpFill { background: var(--safe); }
+  #shFill { background: #cfd6e6; opacity: 0.9; }
+  #mpFill { background: #3f7fd0; }
+  .vbar.mp { height: 9px; margin-top: 3px; }
+
+  /* abilities */
+  #abilities { display: flex; gap: 5px; }
+  .ab {
+    position: relative; width: 50px; height: 50px; flex: none;
+    background: #07070d; border: 1px solid var(--edge);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    cursor: pointer;
+  }
+  .ab.ready { border-color: #3a3a52; }
+  .ab.armed { border-color: var(--gold); background: #14120a; }
+  .ab .k { font-family: var(--display); font-size: 13px; line-height: 1; }
+  .ab .n { font-size: 7px; letter-spacing: 0.08em; color: var(--muted); line-height: 1;
+    max-width: 46px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ab .cd {
+    position: absolute; inset: 0; background: rgba(5,5,10,0.78); color: var(--ink);
+    display: none; align-items: center; justify-content: center;
+    font-family: var(--display); font-size: 16px; font-variant-numeric: tabular-nums;
+  }
+  .ab.cool .cd { display: flex; }
+  .ab.locked { opacity: 0.38; }
+  .ab.nomana .k { color: #3f7fd0; }
+  .ab .pips { position: absolute; left: 3px; bottom: 3px; display: flex; gap: 2px; }
+  .ab .pips s { width: 5px; height: 3px; background: #23232f; text-decoration: none; }
+  .ab .pips s.on { background: var(--gold); }
+  .ab .up {
+    position: absolute; right: 2px; top: 2px; width: 13px; height: 13px;
+    background: var(--gold); color: #05050a; font-family: var(--display); font-size: 10px;
+    display: none; align-items: center; justify-content: center; line-height: 1;
+  }
+  .ab.canlevel .up { display: flex; }
+
+  /* items */
+  #items { display: grid; grid-template-columns: repeat(3, 26px); grid-auto-rows: 26px; gap: 3px; }
+  #items div { background: #07070d; border: 1px solid var(--edge); position: relative; }
+  #items div.on::after {
+    content: ""; position: absolute; inset: 5px; border-radius: 50%; background: var(--fill, var(--gold));
+  }
+
+  /* stats + minimap */
+  #stats { display: block; font-size: 10px; color: var(--muted); line-height: 1.5; white-space: nowrap; }
+  #stats b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  #stats .g { color: var(--gold); }
+  #mini { background: #07070d; border: 1px solid var(--edge); display: block; flex: none; }
+
+  /* ---------------- overlays ---------------- */
+  .screen {
+    position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain;
+    background: rgba(5, 5, 10, 0.93); z-index: 5;
+  }
+  .screen[hidden] { display: none; }
+  .sheet {
+    min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 18px; text-align: center; padding: 26px; line-height: 1.5;
+  }
+  h1 {
+    font-family: var(--display); font-weight: 900; margin: 0;
+    font-size: clamp(2.2rem, 6vw, 4.2rem); line-height: 0.88;
+    letter-spacing: -0.02em; text-transform: uppercase;
+  }
+  h1 em { font-style: normal; color: var(--hot); }
+  h2 { font-family: var(--display); margin: 0; font-size: clamp(1.7rem, 4.5vw, 2.8rem);
+    text-transform: uppercase; letter-spacing: 0.02em; }
+  .tag { font-size: 11px; letter-spacing: 0.2em; color: var(--muted); text-transform: uppercase; }
+
+  /* champion select */
+  #picks { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+  .pick {
+    width: 210px; padding: 16px 14px; background: var(--panel); border: 1px solid var(--edge);
+    cursor: pointer; text-align: left; color: var(--ink); font-family: var(--mono);
+  }
+  .pick:hover, .pick:focus { border-color: var(--gold); outline: none; }
+  .pick .dot { width: 34px; height: 34px; border-radius: 50%; margin-bottom: 10px; }
+  .pick h3 { font-family: var(--display); margin: 0 0 2px; font-size: 20px; letter-spacing: 0.02em; }
+  .pick .role { font-size: 9px; letter-spacing: 0.16em; color: var(--muted); text-transform: uppercase; }
+  .pick ul { list-style: none; padding: 0; margin: 12px 0 0; font-size: 10.5px; color: var(--muted); line-height: 1.7; }
+  .pick ul b { color: var(--ink); font-family: var(--display); font-weight: 900; }
+
+  .keys-grid {
+    display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: center;
+    text-align: left; font-size: 11.5px; color: var(--muted); max-width: 46ch;
+  }
+  .keys-grid kbd {
+    justify-self: end; white-space: nowrap; background: #12121b; border: 1px solid var(--edge);
+    padding: 1px 6px; font-family: var(--mono); font-size: 10px; color: var(--ink);
+  }
+  .keys-grid b { color: var(--ink); }
+
+  button.go {
+    font-family: var(--display); font-size: 16px; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 12px 26px; background: var(--ink); color: #05050a; border: 0; cursor: pointer;
+  }
+  button.go:hover { background: var(--gold); }
+
+  /* shop */
+  #shopGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 8px; width: min(760px, 92vw); }
+  .item {
+    display: flex; gap: 10px; align-items: center; padding: 9px 10px; text-align: left;
+    background: var(--panel); border: 1px solid var(--edge); color: var(--ink);
+    font-family: var(--mono); cursor: pointer;
+  }
+  .item:hover:not(:disabled) { border-color: var(--gold); }
+  .item:disabled { opacity: 0.35; cursor: default; }
+  .item i { width: 16px; height: 16px; border-radius: 50%; flex: none; }
+  .item .nm { font-size: 11px; font-weight: 700; }
+  .item .st { font-size: 9.5px; color: var(--muted); }
+  .item .pr { margin-left: auto; font-family: var(--display); font-size: 12px; color: var(--gold); }
+
+  /* the toast line — kills, turrets, waves */
+  #feed {
+    position: absolute; right: 10px; top: 42px; width: 250px; z-index: 4;
+    display: flex; flex-direction: column; gap: 4px; pointer-events: none; text-align: right;
+  }
+  #feed div {
+    font-size: 10.5px; letter-spacing: 0.04em; background: rgba(11,11,18,0.86);
+    border-right: 2px solid var(--edge); padding: 4px 7px; line-height: 1.3;
+  }
+  #feed b { font-weight: 700; }
+  .cBlue { color: var(--blue); } .cRed { color: var(--red); }
+  .cGold { color: var(--gold); } .cSafe { color: var(--safe); } .cHot { color: var(--hot); }
+
+  /* the centre callout — SHUTDOWN, ACE, turret down */
+  #callout {
+    position: absolute; left: 0; right: 0; top: 26%; text-align: center; pointer-events: none;
+    font-family: var(--display); font-size: clamp(1.4rem, 4vw, 2.6rem); text-transform: uppercase;
+    letter-spacing: 0.04em; opacity: 0; z-index: 4;
+  }
+
+  /* respawn veil */
+  #veil {
+    position: absolute; inset: 0; pointer-events: none; z-index: 3;
+    background: radial-gradient(circle at 50% 50%, rgba(224,51,74,0) 30%, rgba(224,51,74,0.20) 100%);
+    display: none; align-items: center; justify-content: center; flex-direction: column; gap: 6px;
+  }
+  #veil.on { display: flex; }
+  #veil b { font-family: var(--display); font-size: 62px; color: var(--hot); line-height: 1; }
+
+  @media (max-width: 720px) {
+    #items, #stats { display: none; }
+    .ab { width: 42px; height: 42px; }
+    #portrait { width: 46px; height: 46px; }
+  }
+</style>
+
+<div id="stage">
+  <div id="frame">
+    <canvas id="board"></canvas>
+    <div id="scan"></div>
+
+    <div id="top">
+      <span class="score blue"><i></i>ORDER <b id="sBlue">0</b></span>
+      <span id="clock">0:00</span>
+      <span class="score red"><b id="sRed">0</b>CHAOS <i></i></span>
+    </div>
+
+    <div id="feed"></div>
+    <div id="callout"></div>
+    <div id="veil"><span class="tag">Respawning in</span><b id="veilN">6</b></div>
+
+    <!-- ------------ champion select ------------ -->
+    <div class="screen" id="menu">
+      <div class="sheet">
+        <h1>DOT <em>LEGEND</em></h1>
+        <p class="tag">One lane · two nexuses · every unit is a dot</p>
+        <div id="picks"></div>
+        <div class="keys-grid">
+          <kbd>Right click</kbd><span>Move. Right click an enemy dot to <b>attack</b> it.</span>
+          <kbd>Q W E R</kbd><span>Abilities. Click to aim, right click to cancel.</span>
+          <kbd>Ctrl + Q/W/E/R</kbd><span>Spend a skill point (or click the <b>+</b>).</span>
+          <kbd>A</kbd><span>Attack-move: walk there, hit whatever you meet.</span>
+          <kbd>S</kbd><span>Stop.</span>
+          <kbd>B</kbd><span>Recall — 5s channel, breaks on damage.</span>
+          <kbd>P</kbd><span>Shop. Only opens in your fountain.</span>
+          <kbd>Space</kbd><span>Snap the camera back to your dot.</span>
+          <kbd>M</kbd><span>Mute.</span>
+        </div>
+        <p class="tag" style="max-width:52ch">Last-hit minions for gold. Outer turret first — the ones behind it
+          are invulnerable until it falls. Kill the enemy nexus to win.</p>
+      </div>
+    </div>
+
+    <!-- ------------ shop ------------ -->
+    <div class="screen" id="shop" hidden>
+      <div class="sheet">
+        <h2 style="color:var(--gold)">Shop</h2>
+        <p class="tag"><b id="shopGold" class="cGold">0</b> gold · <span id="shopSlots">0/6</span> slots ·
+          press <kbd style="font-size:10px">P</kbd> or <kbd style="font-size:10px">Esc</kbd> to close</p>
+        <div id="shopGrid"></div>
+      </div>
+    </div>
+
+    <!-- ------------ result ------------ -->
+    <div class="screen" id="over" hidden>
+      <div class="sheet">
+        <h1 id="overTitle">VICTORY</h1>
+        <p class="tag" id="overLine"></p>
+        <button class="go" id="again">Play again</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ------------ bottom bar ------------ -->
+  <div id="bar" class="hidden">
+    <div id="portrait">
+      <div id="portDot"></div><div id="portLvl">1</div><div id="portDead">✕</div>
+    </div>
+
+    <div class="cell" id="vitals">
+      <div>
+        <div class="vbar"><i id="shFill" style="right:100%"></i><i id="hpFill" style="right:100%"></i>
+          <u id="hpTxt">0 / 0</u></div>
+        <div class="vbar mp"><i id="mpFill" style="right:100%"></i></div>
+      </div>
+      <div class="lbl" id="stateLine">&nbsp;</div>
+    </div>
+
+    <div class="cell"><div class="lbl">Abilities</div><div id="abilities"></div></div>
+    <div class="cell"><div class="lbl">Items</div><div id="items"></div></div>
+    <div class="cell"><div id="stats"></div></div>
+    <div class="cell"><canvas id="mini" width="248" height="56"></canvas></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ==================================================================== *
+ * 1. THE WORLD
+ * The map is a grid, exactly like the dot world: one lane running
+ * left to right, terrain above and below, brush pockets you can hide
+ * in, a river through the middle, a fountain at each end.
+ * ==================================================================== */
+
+const TILE = 28;
+const MAP_W = 120, MAP_H = 27;
+const WORLD_W = MAP_W * TILE, WORLD_H = MAP_H * TILE;
+
+const WALL = 0, LANE = 1, BRUSH = 2, BASE = 3, RIVER = 4;
+
+const LANE_ROW = 13;                 // the centre line everything walks
+const LANE_TOP = 10, LANE_BOT = 16;  // walkable band
+const RIVER_X0 = 57, RIVER_X1 = 62;
+
+const BLUE = 0, RED = 1;
+const TEAM_COLOR = ["#4a7bf0", "#e0334a"];
+const TEAM_DIM   = ["#22345f", "#5e1f2b"];
+const TEAM_NAME  = ["ORDER", "CHAOS"];
+
+const terrain = new Uint8Array(MAP_W * MAP_H);
+const at = (c, r) => (c < 0 || r < 0 || c >= MAP_W || r >= MAP_H) ? WALL : terrain[r * MAP_W + c];
+const setT = (c, r, v) => { if (c >= 0 && r >= 0 && c < MAP_W && r < MAP_H) terrain[r * MAP_W + c] = v; };
+const walkable = (c, r) => at(c, r) !== WALL;
+const walkableAt = (x, y) => walkable(Math.floor(x / TILE), Math.floor(y / TILE));
+
+// brush patches, mirrored around the middle so neither side has the advantage
+const mirrorX = (c) => MAP_W - 1 - c;
+const BRUSH_SPANS = [[24, 30], [45, 51]].flatMap(([a, b]) => [[a, b], [mirrorX(b), mirrorX(a)]]);
+
+function buildMap() {
+  terrain.fill(WALL);
+
+  // the lane itself
+  for (let c = 6; c < MAP_W - 6; c++)
+    for (let r = LANE_TOP; r <= LANE_BOT; r++) setT(c, r, LANE);
+
+  // the river crossing the middle — cosmetic, but it is the landmark
+  // everybody means when they say "mid"
+  for (let c = RIVER_X0; c <= RIVER_X1; c++)
+    for (let r = LANE_TOP; r <= LANE_BOT; r++) setT(c, r, RIVER);
+
+  // brush: pockets hanging off the top and bottom edge of the lane
+  for (const [a, b] of BRUSH_SPANS) {
+    for (let c = a; c <= b; c++) {
+      for (let r = LANE_TOP - 3; r < LANE_TOP; r++) setT(c, r, BRUSH);
+      for (let r = LANE_BOT + 1; r <= LANE_BOT + 3; r++) setT(c, r, BRUSH);
+    }
+  }
+
+  // the two bases — open rooms with the fountain at the back
+  for (const [x0, x1] of [[3, 17], [MAP_W - 18, MAP_W - 4]])
+    for (let c = x0; c <= x1; c++)
+      for (let r = LANE_ROW - 6; r <= LANE_ROW + 6; r++)
+        if (Math.abs(r - LANE_ROW) + Math.abs(c - (x0 + x1) / 2) * 0.42 < 8.5) setT(c, r, BASE);
+}
+buildMap();
+
+const FOUNTAIN = [{ x: 7 * TILE, y: LANE_ROW * TILE + TILE / 2 },
+                  { x: (MAP_W - 8) * TILE, y: LANE_ROW * TILE + TILE / 2 }];
+const FOUNTAIN_R = 3.6 * TILE;
+
+// turrets, outermost first — a turret is invulnerable while a turret
+// further out on the same side is still standing
+const TURRETS = [
+  [{ x: 43, tier: 0 }, { x: 27, tier: 1 }, { x: 16, tier: 2 }],
+  [{ x: MAP_W - 44, tier: 0 }, { x: MAP_W - 28, tier: 1 }, { x: MAP_W - 17, tier: 2 }],
+];
+const NEXUS_X = [9, MAP_W - 10];
+
+/* ==================================================================== *
+ * 2. NUMBERS
+ * ==================================================================== */
+
+const MATCH = {
+  waveEvery: 22,        // seconds between minion waves
+  firstWave: 8,
+  goldPerSec: 2.4,      // the passive trickle
+  startGold: 500,
+  respawnBase: 6,       // + 1.8 per level
+  xpCap: 18,
+};
+
+const XP_FOR_LEVEL = (l) => Math.round(190 + 110 * l + 9 * l * l);
+
+const MINION = {
+  melee:  { hp: 460, ad: 13, range: 38,  ms: 92,  gold: 21, xp: 60,  r: 7,   armor: 2, aspd: 1.1 },
+  ranged: { hp: 320, ad: 24, range: 190, ms: 92,  gold: 15, xp: 44,  r: 6.5, armor: 0, aspd: 0.9 },
+  siege:  { hp: 900, ad: 42, range: 230, ms: 84,  gold: 46, xp: 96,  r: 9.5, armor: 8, aspd: 0.7 },
+};
+
+const TURRET_STATS = [
+  { hp: 2400, ad: 128, range: 290, armor: 30, gold: 220 },
+  { hp: 2700, ad: 148, range: 290, armor: 40, gold: 260 },
+  { hp: 3000, ad: 168, range: 290, armor: 50, gold: 300 },
+];
+const NEXUS_HP = 3600;
+
+const KILL_GOLD = 300, ASSIST_GOLD = 150, KILL_XP = 240;
+
+/* ==================================================================== *
+ * 3. CHAMPIONS
+ * Three dots, three shapes of fight. Abilities are data: a cast()
+ * and the numbers around it, so the dot world can borrow one later
+ * without dragging the whole game along.
+ * ==================================================================== */
+
+const CHAMPS = {
+  VECTOR: {
+    name: "VECTOR", role: "Marksman", color: "#f2c230",
+    blurb: "Long range, no health. Every fight is a spacing puzzle.",
+    hp: 545, hpG: 92, mp: 340, mpG: 40, ad: 62, adG: 3.4, armor: 20, armorG: 3.8,
+    mr: 24, mrG: 1.4, ms: 142, aspd: 0.68, aspdG: 0.031, range: 210, ranged: true, r: 11,
+    hpReg: 5.5, mpReg: 7.5,
+    tips: ["Q pierces everything in a line", "W is your only escape", "R can finish across the screen"],
+    abils: [
+      { key: "Q", name: "PIERCE", cd: [9, 8.2, 7.4, 6.6, 5.8], cost: 45, range: 760, aim: "line",
+        desc: "A bolt through everything in a line.",
+        dmg: (u, k) => 34 + 26 * k + 0.95 * ad(u),
+        cast(u, tx, ty) { lineShot(u, tx, ty, 760, 15, this.dmg(u, u.ranks[0]), "phys", { pierce: true, speed: 900, color: "#f2c230" }); } },
+      { key: "W", name: "SIDESTEP", cd: [16, 14.5, 13, 11.5, 10], cost: 40, range: 230, aim: "point",
+        desc: "Hop 230 and move faster for 2s.",
+        cast(u, tx, ty) { dashTo(u, tx, ty, 230, 620); buff(u, "ms", 0.28, 2); } },
+      { key: "E", name: "OVERCLOCK", cd: [15, 14, 13, 12, 11], cost: 45, range: 0, aim: "self",
+        desc: "+50% attack speed for 5s.",
+        cast(u) { buff(u, "aspd", 0.5 + 0.06 * u.ranks[2], 5); ping(u.x, u.y, "#f2c230"); } },
+      { key: "R", name: "SNIPE", cd: [90, 80, 70], cost: 100, range: 1500, aim: "line", ult: true,
+        desc: "A shot the length of the lane. First dot hit takes it all.",
+        dmg: (u, k) => 170 + 110 * k + 1.25 * ad(u),
+        cast(u, tx, ty) { lineShot(u, tx, ty, 1500, 17, this.dmg(u, u.ranks[3]), "phys", { speed: 1600, color: "#fff2b0", big: true }); } },
+    ],
+  },
+
+  PULSE: {
+    name: "PULSE", role: "Mage", color: "#b45bd8",
+    blurb: "Zones the ground, then deletes whoever stayed on it.",
+    hp: 620, hpG: 100, mp: 480, mpG: 56, ad: 53, adG: 2.7, armor: 22, armorG: 4,
+    mr: 30, mrG: 1.6, ms: 140, aspd: 0.62, aspdG: 0.018, range: 200, ranged: true, r: 11,
+    hpReg: 6, mpReg: 10, ap: true,
+    tips: ["W slows the ground for 3s", "E blinks through terrain", "R is the whole teamfight"],
+    abils: [
+      { key: "Q", name: "BOLT", cd: [7, 6.4, 5.8, 5.2, 4.6], cost: 40, range: 700, aim: "line",
+        desc: "A slowing bolt. Stops on the first dot.",
+        dmg: (u, k) => 48 + 30 * k + 0.65 * ap(u),
+        cast(u, tx, ty) { lineShot(u, tx, ty, 700, 13, this.dmg(u, u.ranks[0]), "magic", { speed: 780, color: "#b45bd8", slow: [0.3, 1.2] }); } },
+      { key: "W", name: "FIELD", cd: [14, 13, 12, 11, 10], cost: 65, range: 620, aim: "point",
+        desc: "A pool that burns and slows for 3s.",
+        cast(u, tx, ty) {
+          const k = u.ranks[1];
+          G.zones.push({ x: tx, y: ty, r: 92, team: u.team, owner: u.id, t: 3, tick: 0,
+            dmg: 13 + 8 * k + 0.10 * ap(u), slow: 0.35, color: "#b45bd8" });
+        } },
+      { key: "E", name: "BLINK", cd: [20, 18.5, 17, 15.5, 14], cost: 60, range: 320, aim: "point",
+        desc: "Blink 320. Terrain does not stop you.",
+        cast(u, tx, ty) { blinkTo(u, tx, ty, 320); } },
+      { key: "R", name: "NOVA", cd: [100, 88, 76], cost: 120, range: 230, aim: "self", ult: true,
+        desc: "Everything within 230 is hit and stunned.",
+        dmg: (u, k) => 210 + 130 * k + 0.95 * ap(u),
+        cast(u) {
+          const d = this.dmg(u, u.ranks[3]);
+          burst(u, u.x, u.y, 230, d, "magic", { stun: 0.7, color: "#b45bd8" });
+          G.fx.push({ kind: "ring", x: u.x, y: u.y, r: 20, to: 230, t: 0.45, life: 0.45, color: "#b45bd8" });
+        } },
+    ],
+  },
+
+  BULWARK: {
+    name: "BULWARK", role: "Fighter", color: "#35c05a",
+    blurb: "Walks in, and the fight happens where it lands.",
+    hp: 790, hpG: 132, mp: 320, mpG: 38, ad: 68, adG: 4, armor: 38, armorG: 5.4,
+    mr: 32, mrG: 1.6, ms: 158, aspd: 0.66, aspdG: 0.026, range: 95, ranged: false, r: 12,
+    hpReg: 9, mpReg: 7,
+    tips: ["E charges in and stuns", "W is a shield, not a heal", "R hits everything around you"],
+    abils: [
+      { key: "Q", name: "CLEAVE", cd: [6, 5.5, 5, 4.5, 4], cost: 35, range: 130, aim: "point",
+        desc: "A swing in an arc. Heals per dot hit.",
+        dmg: (u, k) => 42 + 28 * k + 1.05 * ad(u),
+        cast(u, tx, ty) {
+          const hit = cone(u, tx, ty, 130, 1.5, this.dmg(u, u.ranks[0]), "phys", { color: "#35c05a" });
+          if (hit) heal(u, 8 + 5 * u.ranks[0] + 0.12 * ad(u));
+        } },
+      { key: "W", name: "GUARD", cd: [15, 14, 13, 12, 11], cost: 50, range: 0, aim: "self",
+        desc: "A shield for 3s.",
+        cast(u) { shield(u, 80 + 55 * u.ranks[1] + 0.10 * u.maxHp, 3); } },
+      { key: "E", name: "CHARGE", cd: [17, 16, 15, 14, 13], cost: 55, range: 340, aim: "point",
+        desc: "Charge. The first dot you hit is stunned.",
+        dmg: (u, k) => 50 + 32 * k + 0.7 * ad(u),
+        cast(u, tx, ty) {
+          dashTo(u, tx, ty, 340, 780);
+          u.chargeHit = { dmg: this.dmg(u, u.ranks[2]), stun: 0.9 };
+        } },
+      { key: "R", name: "QUAKE", cd: [95, 85, 75], cost: 100, range: 260, aim: "self", ult: true,
+        desc: "The ground breaks. Everything near is hit and slowed.",
+        dmg: (u, k) => 200 + 130 * k + 1.0 * ad(u),
+        cast(u) {
+          burst(u, u.x, u.y, 260, this.dmg(u, u.ranks[3]), "phys", { slow: [0.5, 2], color: "#35c05a", shake: 12 });
+          G.fx.push({ kind: "ring", x: u.x, y: u.y, r: 24, to: 260, t: 0.5, life: 0.5, color: "#35c05a" });
+        } },
+    ],
+  },
+};
+const CHAMP_KEYS = Object.keys(CHAMPS);
+
+/* ==================================================================== *
+ * 4. ITEMS
+ * ==================================================================== */
+
+const ITEMS = [
+  { id: "blade",  name: "Long Blade",   price: 350,  color: "#e0334a", stats: { ad: 12 },                    txt: "+12 attack damage" },
+  { id: "tome",   name: "Amp Tome",     price: 400,  color: "#b45bd8", stats: { ap: 22 },                    txt: "+22 ability power" },
+  { id: "ruby",   name: "Ruby Shard",   price: 400,  color: "#35c05a", stats: { hp: 180 },                   txt: "+180 health" },
+  { id: "boots",  name: "Boots",        price: 300,  color: "#23b0c4", stats: { ms: 32 },                    txt: "+32 move speed" },
+  { id: "cloak",  name: "Iron Cloak",   price: 450,  color: "#7c7a95", stats: { armor: 18, mr: 14 },         txt: "+18 armor, +14 magic resist" },
+
+  { id: "fang",   name: "Bloodfang",    price: 2700, color: "#e0334a", stats: { ad: 45, lifesteal: 0.14 },   txt: "+45 AD, 14% lifesteal" },
+  { id: "caller", name: "Bladecaller",  price: 2800, color: "#f07818", stats: { ad: 38, aspd: 0.32 },        txt: "+38 AD, +32% attack speed" },
+  { id: "void",   name: "Voidshard",    price: 2650, color: "#b45bd8", stats: { ap: 85, mp: 260 },           txt: "+85 AP, +260 mana" },
+  { id: "plate",  name: "Bulwark Plate",price: 2700, color: "#35c05a", stats: { hp: 420, armor: 45 },        txt: "+420 health, +45 armor" },
+  { id: "aegis",  name: "Aegis",        price: 2400, color: "#4a7bf0", stats: { hp: 280, mr: 50, hpReg: 8 }, txt: "+280 health, +50 MR, regen" },
+  { id: "swift",  name: "Swiftboots",   price: 900,  color: "#23b0c4", stats: { ms: 78 },                    txt: "+78 move speed" },
+  { id: "hourgl", name: "Hourglass",    price: 2500, color: "#ffc53d", stats: { ap: 55, armor: 35, hp: 150 },txt: "+55 AP, +35 armor, +150 HP" },
+];
+const ITEM_BY_ID = Object.fromEntries(ITEMS.map((i) => [i.id, i]));
+
+/* ==================================================================== *
+ * 5. STATE
+ * ==================================================================== */
+
+const G = {
+  phase: "menu",           // menu | play | over
+  t: 0, dt: 0, clock: 0,
+  units: [], projs: [], zones: [], fx: [], floats: [],
+  byId: new Map(), nextId: 1,
+  me: null, bot: null,
+  wave: 0, nextWave: MATCH.firstWave,
+  kills: [0, 0], nexusDown: -1,
+  cam: { x: 0, y: 0, lock: true, shake: 0 },
+  mouse: { sx: 0, sy: 0, x: 0, y: 0, down: false },
+  armed: -1,               // ability index waiting for a click
+  shopOpen: false, muted: false,
+  view: { w: 100, h: 100, dpr: 1 },
+  paused: false,
+};
+
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const dist2 = (a, b) => { const dx = a.x - b.x, dy = a.y - b.y; return dx * dx + dy * dy; };
+const dist = (a, b) => Math.sqrt(dist2(a, b));
+const len = (x, y) => Math.sqrt(x * x + y * y);
+const rand = (n) => Math.random() * n;
+const randInt = (n) => (Math.random() * n) | 0;
+const now = () => G.t;
+
+/* ==================================================================== *
+ * 6. UNITS
+ * ==================================================================== */
+
+function addUnit(u) {
+  u.id = G.nextId++;
+  u.buffs = u.buffs || [];
+  u.hitFlash = 0; u.atkCd = 0; u.path = null; u.target = null; u.order = null;
+  u.shieldHp = 0; u.shieldT = 0; u.stun = 0; u.slow = 0; u.slowT = 0;
+  u.dash = null; u.vision = u.vision || 220;
+  u.dmgLog = u.dmgLog || [];
+  G.units.push(u);
+  G.byId.set(u.id, u);
+  return u;
+}
+
+const alive = (u) => u && !u.dead;
+const isChamp = (u) => !!u && u.kind === "champ";
+const isStruct = (u) => !!u && (u.kind === "turret" || u.kind === "nexus");
+
+function makeChamp(team, key, isBot) {
+  const C = CHAMPS[key];
+  const u = addUnit({
+    kind: "champ", team, champ: key, C, bot: !!isBot,
+    x: FOUNTAIN[team].x, y: FOUNTAIN[team].y, r: C.r,
+    level: 1, xp: 0, gold: MATCH.startGold, points: 1,
+    ranks: [0, 0, 0, 0], cds: [0, 0, 0, 0],
+    items: [], k: 0, d: 0, a: 0, cs: 0,
+    dead: false, respawn: 0, recall: 0, vision: 300,
+    stance: "hold",
+  });
+  recalc(u, true);
+  u.hp = u.maxHp; u.mp = u.maxMp;
+  return u;
+}
+
+function makeMinion(team, type, lane, x) {
+  const M = MINION[type];
+  const u = addUnit({
+    kind: "minion", type, team, M,
+    x, y: LANE_ROW * TILE + TILE / 2 + (Math.random() - 0.5) * TILE * 2.2,
+    r: M.r, hp: M.hp, maxHp: M.hp, vision: 190,
+    stat: { ad: M.ad, ap: 0, armor: M.armor, mr: 0, ms: M.ms, aspd: M.aspd, range: M.range, lifesteal: 0 },
+  });
+  // minions get stronger as the match runs long, or the game never ends
+  const scale = 1 + G.wave * 0.05;
+  u.maxHp = Math.round(M.hp * scale); u.hp = u.maxHp;
+  u.stat.ad = Math.round(M.ad * scale);
+  return u;
+}
+
+function makeTurret(team, def) {
+  const S = TURRET_STATS[def.tier];
+  return addUnit({
+    kind: "turret", team, tier: def.tier, S,
+    x: def.x * TILE + TILE / 2, y: LANE_ROW * TILE + TILE / 2,
+    r: 17, hp: S.hp, maxHp: S.hp, vision: 340,
+    stat: { ad: S.ad, ap: 0, armor: S.armor, mr: S.armor, ms: 0, aspd: 0.83, range: S.range, lifesteal: 0 },
+    aggroLock: null, ramp: 0,
+  });
+}
+
+function makeNexus(team) {
+  return addUnit({
+    kind: "nexus", team,
+    x: NEXUS_X[team] * TILE + TILE / 2, y: LANE_ROW * TILE + TILE / 2,
+    r: 26, hp: NEXUS_HP, maxHp: NEXUS_HP, vision: 300,
+    stat: { ad: 0, ap: 0, armor: 25, mr: 25, ms: 0, aspd: 0, range: 0, lifesteal: 0 },
+  });
+}
+
+// every derived number lives in u.stat, rebuilt whenever something changes
+function recalc(u, keepRatio) {
+  const C = u.C, L = u.level - 1;
+  const s = { ad: 0, ap: 0, armor: 0, mr: 0, ms: 0, aspd: 0, hp: 0, mp: 0, hpReg: 0, mpReg: 0, lifesteal: 0, range: C.range };
+  s.ad = C.ad + C.adG * L;
+  s.armor = C.armor + C.armorG * L;
+  s.mr = C.mr + C.mrG * L;
+  s.ms = C.ms;
+  s.aspd = C.aspd + C.aspdG * L;
+  s.hpReg = C.hpReg + L * 0.5;
+  s.mpReg = C.mpReg + L * 0.4;
+  let hp = C.hp + C.hpG * L, mp = C.mp + C.mpG * L;
+
+  for (const id of u.items) {
+    const it = ITEM_BY_ID[id]; if (!it) continue;
+    for (const [k, v] of Object.entries(it.stats)) {
+      if (k === "hp") hp += v;
+      else if (k === "mp") mp += v;
+      else s[k] = (s[k] || 0) + v;
+    }
+  }
+  const ratio = keepRatio ? 1 : (u.maxHp ? u.hp / u.maxHp : 1);
+  const mratio = keepRatio ? 1 : (u.maxMp ? u.mp / u.maxMp : 1);
+  u.maxHp = Math.round(hp); u.maxMp = Math.round(mp);
+  if (!keepRatio) { u.hp = Math.min(u.maxHp, u.maxHp * ratio); u.mp = Math.min(u.maxMp, u.maxMp * mratio); }
+  u.stat = s;
+}
+
+const ad = (u) => u.stat.ad;
+const ap = (u) => u.stat.ap || 0;
+
+function buff(u, kind, v, t) {
+  u.buffs.push({ kind, v, t });
+}
+function buffVal(u, kind) {
+  let v = 0;
+  for (const b of u.buffs) if (b.kind === kind) v += b.v;
+  return v;
+}
+function moveSpeed(u) {
+  const base = u.stat.ms * (1 + buffVal(u, "ms"));
+  return base * (1 - clamp(u.slow, 0, 0.8));
+}
+function attackSpeed(u) {
+  return u.stat.aspd * (1 + buffVal(u, "aspd"));
+}
+
+function shield(u, amt, t) {
+  u.shieldHp = Math.max(u.shieldHp, amt); u.shieldT = t;
+  G.fx.push({ kind: "ring", x: u.x, y: u.y, r: u.r + 4, to: u.r + 12, t: 0.3, life: 0.3, color: "#cfd6e6", follow: u.id });
+}
+function heal(u, amt) {
+  if (u.dead) return;
+  const before = u.hp;
+  u.hp = Math.min(u.maxHp, u.hp + amt);
+  if (u.hp - before > 1) float(u, "+" + Math.round(u.hp - before), "#3dff88");
+}
+
+/* ==================================================================== *
+ * 7. PATHING
+ * A* on the tile grid. The lane is a corridor, so paths are short and
+ * we only ever ask for one when an order is given.
+ * ==================================================================== */
+
+const pathBuf = { g: new Float32Array(MAP_W * MAP_H), came: new Int32Array(MAP_W * MAP_H), seen: new Int32Array(MAP_W * MAP_H), stamp: 0 };
+
+function findPath(sx, sy, tx, ty) {
+  const c0 = clamp(Math.floor(sx / TILE), 0, MAP_W - 1), r0 = clamp(Math.floor(sy / TILE), 0, MAP_H - 1);
+  let c1 = clamp(Math.floor(tx / TILE), 0, MAP_W - 1), r1 = clamp(Math.floor(ty / TILE), 0, MAP_H - 1);
+  if (!walkable(c1, r1)) {
+    const near = nearestWalkable(c1, r1); if (!near) return null; c1 = near[0]; r1 = near[1];
+  }
+  if (c0 === c1 && r0 === r1) return [{ x: tx, y: ty }];
+
+  const stamp = ++pathBuf.stamp;
+  const { g, came, seen } = pathBuf;
+  const open = [r0 * MAP_W + c0];
+  const start = r0 * MAP_W + c0, goal = r1 * MAP_W + c1;
+  g[start] = 0; came[start] = -1; seen[start] = stamp;
+  const h = (i) => { const c = i % MAP_W, r = (i / MAP_W) | 0; return Math.abs(c - c1) + Math.abs(r - r1); };
+  const f = new Map([[start, h(start)]]);
+  let guard = 0;
+
+  while (open.length && guard++ < 9000) {
+    let bi = 0, bf = Infinity;
+    for (let i = 0; i < open.length; i++) { const v = f.get(open[i]); if (v < bf) { bf = v; bi = i; } }
+    const cur = open.splice(bi, 1)[0];
+    if (cur === goal) return stringPull(rebuild(came, cur), tx, ty);
+    const cc = cur % MAP_W, cr = (cur / MAP_W) | 0;
+    for (let d = 0; d < 8; d++) {
+      const dx = [1, -1, 0, 0, 1, 1, -1, -1][d], dy = [0, 0, 1, -1, 1, -1, 1, -1][d];
+      const nc = cc + dx, nr = cr + dy;
+      if (!walkable(nc, nr)) continue;
+      if (dx && dy && (!walkable(cc + dx, cr) || !walkable(cc, cr + dy))) continue;   // no corner cutting
+      const ni = nr * MAP_W + nc;
+      const ng = g[cur] + (dx && dy ? 1.414 : 1);
+      if (seen[ni] === stamp && ng >= g[ni]) continue;
+      seen[ni] = stamp; g[ni] = ng; came[ni] = cur;
+      f.set(ni, ng + h(ni) * 1.05);
+      if (!open.includes(ni)) open.push(ni);
+    }
+  }
+  return null;
+}
+
+function rebuild(came, i) {
+  const out = [];
+  while (i !== -1) { out.push({ x: (i % MAP_W) * TILE + TILE / 2, y: (((i / MAP_W) | 0)) * TILE + TILE / 2 }); i = came[i]; }
+  return out.reverse();
+}
+
+// walk the corridor in straight lines wherever we can see straight through
+function stringPull(pts, tx, ty) {
+  if (pts.length > 1) pts[pts.length - 1] = { x: tx, y: ty };
+  const out = [pts[0]];
+  let i = 0;
+  while (i < pts.length - 1) {
+    let j = pts.length - 1;
+    while (j > i + 1 && !clearLine(pts[i], pts[j])) j--;
+    out.push(pts[j]); i = j;
+  }
+  out.shift();
+  return out.length ? out : [{ x: tx, y: ty }];
+}
+
+function clearLine(a, b) {
+  const d = dist(a, b), steps = Math.ceil(d / (TILE * 0.34));
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    if (!walkableAt(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)) return false;
+  }
+  return true;
+}
+
+function nearestWalkable(c, r) {
+  for (let rad = 1; rad < 14; rad++)
+    for (let dc = -rad; dc <= rad; dc++)
+      for (let dr = -rad; dr <= rad; dr++) {
+        if (Math.max(Math.abs(dc), Math.abs(dr)) !== rad) continue;
+        if (walkable(c + dc, r + dr)) return [c + dc, r + dr];
+      }
+  return null;
+}
+
+/* ==================================================================== *
+ * 8. DAMAGE
+ * ==================================================================== */
+
+const mitigate = (raw, res) => raw * (100 / (100 + Math.max(0, res)));
+
+function damage(src, tgt, raw, type, opt) {
+  if (!alive(tgt) || raw <= 0) return 0;
+  if (tgt.kind === "nexus" && !nexusOpen(tgt.team)) return 0;
+  if (tgt.kind === "turret" && !turretOpen(tgt)) return 0;
+
+  let dmg = type === "true" ? raw : mitigate(raw, type === "magic" ? tgt.stat.mr : tgt.stat.armor);
+  // structures take reduced champion damage so a lone dot cannot solo a turret in ten seconds
+  if (isStruct(tgt) && src && isChamp(src)) dmg *= 0.82;
+  if (isStruct(tgt) && src && src.kind === "minion") dmg *= 1.5;
+
+  if (tgt.shieldHp > 0) {
+    const eat = Math.min(tgt.shieldHp, dmg);
+    tgt.shieldHp -= eat; dmg -= eat;
+    if (eat > 0) float(tgt, Math.round(eat), "#cfd6e6");
+  }
+  tgt.hp -= dmg;
+  tgt.hitFlash = 0.14;
+  if (dmg > 0 && (isChamp(tgt) || isChamp(src))) float(tgt, Math.round(dmg), src && isChamp(src) && src.team === BLUE ? "#ffffff" : "#ff8a9c");
+
+  if (src && isChamp(src)) {
+    if (src.stat.lifesteal && !isStruct(tgt) && (!opt || !opt.noSteal)) heal(src, dmg * src.stat.lifesteal);
+    if (isChamp(tgt)) tgt.dmgLog.push({ id: src.id, t: G.t });
+    // recalls break the moment anything touches you
+    if (tgt.recall > 0) { tgt.recall = 0; if (tgt === G.me) say("Recall interrupted", "cHot"); }
+  }
+  if (isChamp(tgt) && src) tgt.lastHitBy = src.id;
+  // turrets remember who shot at a champion under them
+  if (isChamp(src) && isChamp(tgt) && src.team !== tgt.team) turretRevenge(src, tgt);
+
+  if (tgt.hp <= 0) die(tgt, src);
+  return dmg;
+}
+
+function die(u, killer) {
+  if (u.dead) return;
+  u.dead = true; u.hp = 0;
+  G.fx.push({ kind: "pop", x: u.x, y: u.y, r: u.r, t: 0.35, life: 0.35, color: unitColor(u) });
+  blip(u.kind === "champ" ? 120 : 200, 0.09, u.kind === "champ" ? "sawtooth" : "square");
+
+  if (u.kind === "minion") {
+    if (killer && isChamp(killer)) {
+      killer.gold += u.M.gold; killer.cs++;
+      float(u, "+" + u.M.gold, "#ffc53d");
+    }
+    grantXp(u.x, u.y, u.M.xp);
+    G.units.splice(G.units.indexOf(u), 1); G.byId.delete(u.id);
+    return;
+  }
+
+  if (u.kind === "turret") {
+    const foe = 1 - u.team;
+    for (const c of champsOf(foe)) c.gold += TURRET_STATS[u.tier].gold;
+    say(`<b class="${foe ? "cRed" : "cBlue"}">${TEAM_NAME[foe]}</b> destroyed a turret`, "cGold");
+    callout("TURRET DOWN", "#ffc53d");
+    G.cam.shake = 10;
+    return;
+  }
+
+  if (u.kind === "nexus") {
+    G.nexusDown = u.team;
+    finish(1 - u.team);
+    return;
+  }
+
+  // a champion
+  u.d++;
+  u.respawn = MATCH.respawnBase + u.level * 1.8;
+  u.recall = 0; u.path = null; u.target = null; u.order = null; u.dash = null;
+  const team = 1 - u.team;
+  G.kills[team]++;
+  if (killer && isChamp(killer)) {
+    killer.k++; killer.gold += KILL_GOLD; grantXp(u.x, u.y, KILL_XP, killer);
+    float(killer, "+" + KILL_GOLD, "#ffc53d");
+  }
+  // assists: anyone who hurt them in the last 9 seconds
+  for (const e of u.dmgLog) {
+    if (G.t - e.t > 9) continue;
+    const c = G.byId.get(e.id);
+    if (c && isChamp(c) && c !== killer && c.team !== u.team) { c.a++; c.gold += ASSIST_GOLD; }
+  }
+  u.dmgLog = [];
+  const who = killer && isChamp(killer) ? killer.champ : killer ? "a turret" : "the lane";
+  say(`<b class="${u.team ? "cBlue" : "cRed"}">${who}</b> killed <b class="${u.team ? "cRed" : "cBlue"}">${u.champ}</b>`, u.team === BLUE ? "cHot" : "cSafe");
+  if (u === G.me) { callout("YOU DIED", "#ff2e4d"); G.cam.shake = 14; }
+  else callout("KILL", "#3dff88");
+}
+
+function grantXp(x, y, amount, forced) {
+  for (const c of G.units) {
+    if (!isChamp(c) || c.dead) continue;
+    if (c !== forced && len(c.x - x, c.y - y) > 420) continue;
+    if (c.level >= MATCH.xpCap) continue;
+    c.xp += amount;
+    while (c.level < MATCH.xpCap && c.xp >= XP_FOR_LEVEL(c.level)) {
+      c.xp -= XP_FOR_LEVEL(c.level);
+      c.level++; c.points++;
+      const before = c.maxHp;
+      recalc(c, true);
+      c.hp += c.maxHp - before; c.mp = Math.min(c.maxMp, c.mp + 60);
+      G.fx.push({ kind: "ring", x: c.x, y: c.y, r: c.r, to: c.r + 34, t: 0.5, life: 0.5, color: "#ffc53d", follow: c.id });
+      if (c === G.me) { callout("LEVEL " + c.level, "#ffc53d"); blip(660, 0.1, "triangle"); }
+    }
+  }
+}
+
+/* the LoL rule that makes a lane a lane: you cannot skip a turret */
+function turretOpen(t) {
+  for (const o of G.units)
+    if (o.kind === "turret" && o.team === t.team && !o.dead && o.tier < t.tier) return false;
+  return true;
+}
+function nexusOpen(team) {
+  return !G.units.some((u) => u.kind === "turret" && u.team === team && !u.dead);
+}
+
+function turretRevenge(src, tgt) {
+  for (const t of G.units) {
+    if (t.kind !== "turret" || t.dead || t.team !== tgt.team) continue;
+    if (len(t.x - tgt.x, t.y - tgt.y) < t.stat.range + 40) { t.aggroLock = { id: src.id, t: 3.2 }; t.ramp = 0; }
+  }
+}
+
+/* ==================================================================== *
+ * 9. ATTACKS, PROJECTILES, ABILITY PRIMITIVES
+ * ==================================================================== */
+
+function autoAttack(u, tgt) {
+  const dmg = u.stat.ad;
+  u.atkCd = 1 / Math.max(0.15, attackSpeed(u));
+  u.facing = Math.atan2(tgt.y - u.y, tgt.x - u.x);
+  const ranged = u.kind === "champ" ? u.C.ranged : (u.stat.range > 90);
+  if (ranged) {
+    G.projs.push({
+      x: u.x, y: u.y, tx: tgt.x, ty: tgt.y, homing: tgt.id, speed: u.kind === "turret" ? 900 : 520,
+      team: u.team, owner: u.id, dmg, type: "phys", r: u.kind === "turret" ? 6 : 4.5,
+      color: u.kind === "turret" ? TEAM_COLOR[u.team] : unitColor(u), single: true,
+    });
+  } else {
+    damage(u, tgt, dmg, "phys");
+    G.fx.push({ kind: "slash", x: tgt.x, y: tgt.y, t: 0.14, life: 0.14, color: unitColor(u) });
+  }
+  if (u === G.me) blip(300, 0.03, "square", 0.05);
+}
+
+function lineShot(u, tx, ty, range, width, dmg, type, opt) {
+  const a = Math.atan2(ty - u.y, tx - u.x);
+  u.facing = a;
+  G.projs.push({
+    x: u.x, y: u.y, vx: Math.cos(a) * (opt.speed || 800), vy: Math.sin(a) * (opt.speed || 800),
+    team: u.team, owner: u.id, dmg, type, r: width / 2, color: opt.color, big: !!opt.big,
+    pierce: !!opt.pierce, slow: opt.slow, stun: opt.stun, hit: new Set(),
+    life: range / (opt.speed || 800), trail: true,
+  });
+  blip(520, 0.06, "sine", 0.05);
+}
+
+function burst(u, x, y, r, dmg, type, opt) {
+  for (const o of G.units) {
+    if (o.dead || o.team === u.team || isStruct(o)) continue;
+    if (len(o.x - x, o.y - y) > r + o.r) continue;
+    damage(u, o, dmg, type);
+    if (opt.stun) applyStun(o, opt.stun);
+    if (opt.slow) applySlow(o, opt.slow[0], opt.slow[1]);
+  }
+  if (opt.shake) G.cam.shake = opt.shake;
+  blip(180, 0.16, "sawtooth", 0.09);
+}
+
+function cone(u, tx, ty, range, halfAngle, dmg, type, opt) {
+  const a = Math.atan2(ty - u.y, tx - u.x);
+  u.facing = a;
+  let any = false;
+  for (const o of G.units) {
+    if (o.dead || o.team === u.team) continue;
+    const d = len(o.x - u.x, o.y - u.y);
+    if (d > range + o.r) continue;
+    let da = Math.abs(Math.atan2(o.y - u.y, o.x - u.x) - a);
+    if (da > Math.PI) da = Math.PI * 2 - da;
+    if (da > halfAngle) continue;
+    damage(u, o, dmg, type); any = true;
+  }
+  G.fx.push({ kind: "cone", x: u.x, y: u.y, a, half: halfAngle, range, t: 0.2, life: 0.2, color: opt.color });
+  blip(260, 0.08, "square", 0.07);
+  return any;
+}
+
+function dashTo(u, tx, ty, maxDist, speed) {
+  const a = Math.atan2(ty - u.y, tx - u.x);
+  let d = Math.min(maxDist, len(tx - u.x, ty - u.y) || maxDist);
+  if (d < 20) d = maxDist;
+  // stop at terrain
+  for (let s = 8; s <= d; s += 8) {
+    if (!walkableAt(u.x + Math.cos(a) * s, u.y + Math.sin(a) * s)) { d = Math.max(0, s - 10); break; }
+  }
+  u.dash = { a, left: d, speed };
+  u.path = null; u.order = null;
+}
+
+function blinkTo(u, tx, ty, maxDist) {
+  const a = Math.atan2(ty - u.y, tx - u.x);
+  let d = Math.min(maxDist, len(tx - u.x, ty - u.y));
+  let px = u.x + Math.cos(a) * d, py = u.y + Math.sin(a) * d;
+  while (d > 0 && !walkableAt(px, py)) { d -= 8; px = u.x + Math.cos(a) * d; py = u.y + Math.sin(a) * d; }
+  G.fx.push({ kind: "pop", x: u.x, y: u.y, r: u.r, t: 0.25, life: 0.25, color: "#b45bd8" });
+  u.x = px; u.y = py; u.path = null; u.order = null;
+  G.fx.push({ kind: "ring", x: px, y: py, r: 4, to: u.r + 16, t: 0.25, life: 0.25, color: "#b45bd8" });
+  blip(880, 0.08, "sine", 0.06);
+}
+
+function applyStun(u, t) { if (isStruct(u)) return; u.stun = Math.max(u.stun, t); u.path = null; }
+function applySlow(u, amt, t) { if (isStruct(u)) return; if (amt >= u.slow) { u.slow = amt; u.slowT = Math.max(u.slowT, t); } }
+
+function ping(x, y, color) { G.fx.push({ kind: "ring", x, y, r: 6, to: 34, t: 0.3, life: 0.3, color }); }
+function float(u, txt, color) { G.floats.push({ x: u.x + rand(10) - 5, y: u.y - u.r - 4, txt: String(txt), color, t: 0.85, life: 0.85 }); }
+
+/* ==================================================================== *
+ * 10. CASTING
+ * ==================================================================== */
+
+function canCast(u, i) {
+  const A = u.C.abils[i];
+  return !u.dead && u.ranks[i] > 0 && u.cds[i] <= 0 && u.mp >= A.cost && u.stun <= 0 && u.recall <= 0;
+}
+
+function tryCast(u, i, tx, ty) {
+  if (!canCast(u, i)) return false;
+  const A = u.C.abils[i];
+  if (A.aim !== "self") {
+    const d = len(tx - u.x, ty - u.y);
+    if (A.aim === "point" && d > A.range) {   // clamp point casts to max range, like a real client does
+      const a = Math.atan2(ty - u.y, tx - u.x);
+      tx = u.x + Math.cos(a) * A.range; ty = u.y + Math.sin(a) * A.range;
+    }
+  }
+  u.mp -= A.cost;
+  u.cds[i] = A.cd[Math.max(0, u.ranks[i] - 1)] * (1 - 0);
+  A.cast(u, tx, ty);
+  return true;
+}
+
+function levelUp(u, i) {
+  const A = u.C.abils[i];
+  const cap = A.ult ? 3 : 5;
+  if (u.points <= 0 || u.ranks[i] >= cap) return false;
+  if (A.ult && u.level < 6 + u.ranks[i] * 5) return false;    // R at 6 / 11 / 16
+  if (!A.ult && u.ranks[i] >= Math.ceil(u.level / 2) + 1) return false;
+  u.ranks[i]++; u.points--;
+  if (u === G.me) blip(720, 0.07, "triangle", 0.06);
+  return true;
+}
+
+/* ==================================================================== *
+ * 11. VISION AND BRUSH
+ * ==================================================================== */
+
+function inBrush(u) {
+  return at(Math.floor(u.x / TILE), Math.floor(u.y / TILE)) === BRUSH;
+}
+
+// can team `team` see unit u right now?
+function visibleTo(u, team) {
+  if (u.team === team) return true;
+  if (isStruct(u)) return true;                        // buildings are always on the map
+  const hidden = inBrush(u);
+  for (const o of G.units) {
+    if (o.team !== team || o.dead) continue;
+    const d = len(o.x - u.x, o.y - u.y);
+    if (hidden) { if (inBrush(o) && d < 260) return true; if (d < 70) return true; }
+    else if (d < o.vision) return true;
+  }
+  return false;
+}
+
+/* ==================================================================== *
+ * 12. THE SIMULATION
+ * ==================================================================== */
+
+const champsOf = (team) => G.units.filter((u) => isChamp(u) && u.team === team);
+const unitColor = (u) => u.kind === "champ" ? u.C.color : TEAM_COLOR[u.team];
+
+function enemyNexusPoint(team) {
+  return { x: NEXUS_X[1 - team] * TILE + TILE / 2, y: LANE_ROW * TILE + TILE / 2 };
+}
+
+function attackRange(u) { return u.stat.range + u.r; }
+function inRange(u, t) { return len(t.x - u.x, t.y - u.y) <= attackRange(u) + t.r; }
+
+// what this unit would like to shoot, in the order a MOBA actually resolves it
+function pickTarget(u) {
+  const R = attackRange(u) + 60;
+  let best = null, bestScore = -1;
+  for (const o of G.units) {
+    if (o.dead || o.team === u.team) continue;
+    if (o.kind === "nexus" && !nexusOpen(o.team)) continue;
+    if (o.kind === "turret" && !turretOpen(o)) continue;
+    if (isChamp(o) && !visibleTo(o, u.team)) continue;
+    const d = len(o.x - u.x, o.y - u.y) - o.r;
+    if (d > R) continue;
+    let s = 100 - d * 0.1;
+    if (u.kind === "minion") {
+      if (o.kind === "minion") s += 60;
+      else if (isChamp(o)) s += (u.threat === o.id ? 90 : 20);
+      else s += 10;
+    } else if (u.kind === "turret") {
+      if (o.kind === "minion") s += 60; else if (isChamp(o)) s += 5;
+    } else {
+      if (isChamp(o)) s += 40; else if (o.kind === "minion") s += 20;
+    }
+    if (s > bestScore) { bestScore = s; best = o; }
+  }
+  return best;
+}
+
+function moveToward(u, tx, ty, dt) {
+  const sp = moveSpeed(u) * dt;
+  const dx = tx - u.x, dy = ty - u.y, d = len(dx, dy);
+  if (d < 1) return true;
+  const step = Math.min(sp, d);
+  const nx = u.x + dx / d * step, ny = u.y + dy / d * step;
+  if (walkableAt(nx, ny)) { u.x = nx; u.y = ny; }
+  else if (walkableAt(nx, u.y)) u.x = nx;
+  else if (walkableAt(u.x, ny)) u.y = ny;
+  else return true;
+  u.facing = Math.atan2(dy, dx);
+  return d - step < 2;
+}
+
+function followPath(u, dt) {
+  if (!u.path || !u.path.length) return true;
+  const p = u.path[0];
+  if (moveToward(u, p.x, p.y, dt) || len(p.x - u.x, p.y - u.y) < 4) u.path.shift();
+  return !u.path.length;
+}
+
+function orderMove(u, x, y, attackMove) {
+  if (u.dead) return;
+  u.order = { kind: attackMove ? "amove" : "move", x, y };
+  u.target = null;
+  u.path = findPath(u.x, u.y, x, y) || [{ x, y }];
+}
+function orderAttack(u, tgt) {
+  if (u.dead || !tgt) return;
+  u.order = { kind: "attack", id: tgt.id };
+  u.target = tgt;
+  u.path = null;
+}
+function orderStop(u) { u.order = null; u.path = null; u.target = null; }
+
+function stepUnit(u, dt) {
+  // ---- timers
+  for (let i = u.buffs.length - 1; i >= 0; i--) { u.buffs[i].t -= dt; if (u.buffs[i].t <= 0) u.buffs.splice(i, 1); }
+  if (u.slowT > 0) { u.slowT -= dt; if (u.slowT <= 0) u.slow = 0; }
+  if (u.stun > 0) u.stun -= dt;
+  if (u.shieldT > 0) { u.shieldT -= dt; if (u.shieldT <= 0) u.shieldHp = 0; }
+  if (u.hitFlash > 0) u.hitFlash -= dt;
+  if (u.atkCd > 0) u.atkCd -= dt;
+
+  if (isChamp(u)) {
+    for (let i = 0; i < 4; i++) if (u.cds[i] > 0) u.cds[i] -= dt;
+    if (u.dead) {
+      u.respawn -= dt;
+      if (u.respawn <= 0) {
+        u.dead = false; u.hp = u.maxHp; u.mp = u.maxMp;
+        u.x = FOUNTAIN[u.team].x; u.y = FOUNTAIN[u.team].y;
+        u.shieldHp = 0; u.stun = 0; u.slow = 0;
+        if (u === G.me) { G.cam.lock = true; callout("RESPAWNED", "#3dff88"); }
+      }
+      return;
+    }
+    u.gold += MATCH.goldPerSec * dt;
+    u.hp = Math.min(u.maxHp, u.hp + u.stat.hpReg * dt);
+    u.mp = Math.min(u.maxMp, u.mp + u.stat.mpReg * dt);
+
+    // fountain: heal fast, and it is where the shop lives
+    const f = FOUNTAIN[u.team];
+    if (len(u.x - f.x, u.y - f.y) < FOUNTAIN_R) {
+      u.hp = Math.min(u.maxHp, u.hp + u.maxHp * 0.30 * dt);
+      u.mp = Math.min(u.maxMp, u.mp + u.maxMp * 0.30 * dt);
+      u.inFountain = true;
+    } else u.inFountain = false;
+
+    if (u.recall > 0) {
+      u.recall -= dt;
+      u.path = null; u.target = null; u.order = null;
+      if (u.recall <= 0) {
+        u.x = f.x; u.y = f.y;
+        G.fx.push({ kind: "ring", x: u.x, y: u.y, r: 4, to: 46, t: 0.4, life: 0.4, color: TEAM_COLOR[u.team] });
+        if (u === G.me) { G.cam.lock = true; say("Recalled", "cSafe"); }
+      }
+      return;
+    }
+  }
+
+  if (u.stun > 0) return;
+
+  // ---- dashes move through everything but terrain
+  if (u.dash) {
+    const step = Math.min(u.dash.speed * dt, u.dash.left);
+    const nx = u.x + Math.cos(u.dash.a) * step, ny = u.y + Math.sin(u.dash.a) * step;
+    if (walkableAt(nx, ny)) { u.x = nx; u.y = ny; u.dash.left -= step; } else u.dash.left = 0;
+    if (u.chargeHit) {
+      for (const o of G.units) {
+        if (o.dead || o.team === u.team || isStruct(o)) continue;
+        if (len(o.x - u.x, o.y - u.y) < o.r + u.r + 4) {
+          damage(u, o, u.chargeHit.dmg, "phys");
+          applyStun(o, u.chargeHit.stun);
+          G.fx.push({ kind: "pop", x: o.x, y: o.y, r: o.r + 6, t: 0.25, life: 0.25, color: "#35c05a" });
+          u.chargeHit = null; u.dash.left = 0; G.cam.shake = 7;
+          break;
+        }
+      }
+    }
+    if (u.dash.left <= 0) { u.dash = null; u.chargeHit = null; }
+    return;
+  }
+
+  // ---- structures only shoot
+  if (isStruct(u)) {
+    if (u.kind === "nexus") return;
+    let t = null;
+    if (u.aggroLock) {
+      u.aggroLock.t -= dt;
+      const c = G.byId.get(u.aggroLock.id);
+      if (u.aggroLock.t > 0 && c && !c.dead && inRange(u, c)) t = c; else u.aggroLock = null;
+    }
+    if (!t) t = pickTarget(u);
+    if (t && inRange(u, t)) {
+      if (u.lastShot !== t.id) { u.ramp = 0; u.lastShot = t.id; }
+      if (u.atkCd <= 0) {
+        const mult = 1 + Math.min(0.5, u.ramp * 0.16);
+        u.atkCd = 1 / u.stat.aspd;
+        G.projs.push({ x: u.x, y: u.y - 8, homing: t.id, speed: 620, team: u.team, owner: u.id,
+          dmg: u.stat.ad * mult, type: "phys", r: 6, color: TEAM_COLOR[u.team], single: true });
+        u.ramp++;
+      }
+    } else { u.lastShot = null; u.ramp = 0; }
+    return;
+  }
+
+  // ---- minions walk the lane and hit what they meet
+  if (u.kind === "minion") {
+    const t = pickTarget(u);
+    if (t && inRange(u, t)) {
+      u.target = t;
+      if (u.atkCd <= 0) autoAttack(u, t);
+      return;
+    }
+    if (t && len(t.x - u.x, t.y - u.y) < 260) { moveToward(u, t.x, t.y, dt); return; }
+    const goal = enemyNexusPoint(u.team);
+    const laneY = LANE_ROW * TILE + TILE / 2;
+    moveToward(u, goal.x, u.y + clamp(laneY + (u.yBias || 0) - u.y, -40, 40), dt);
+    return;
+  }
+
+  // ---- champions follow their order
+  const o = u.order;
+  if (o && o.kind === "attack") {
+    const t = G.byId.get(o.id);
+    if (!t || t.dead || (isChamp(t) && !visibleTo(t, u.team))) { u.order = null; u.target = null; }
+    else if (inRange(u, t)) { u.target = t; if (u.atkCd <= 0) autoAttack(u, t); }
+    else {
+      u.target = t;
+      if (!u.path || u.repath <= 0 || !u.path.length) { u.path = findPath(u.x, u.y, t.x, t.y) || null; u.repath = 0.3; }
+      u.repath -= dt;
+      followPath(u, dt);
+    }
+    return;
+  }
+  if (o && o.kind === "amove") {
+    const t = pickTarget(u);
+    if (t && inRange(u, t)) { u.target = t; if (u.atkCd <= 0) autoAttack(u, t); return; }
+    u.target = null;
+    if (followPath(u, dt)) u.order = null;
+    return;
+  }
+  if (o && o.kind === "move") {
+    u.target = null;
+    if (followPath(u, dt)) u.order = null;
+    return;
+  }
+  // idle: still defend yourself
+  const t = pickTarget(u);
+  if (t && inRange(u, t) && (isChamp(t) || u.stance === "aggro")) {
+    u.target = t; if (u.atkCd <= 0) autoAttack(u, t);
+  } else u.target = null;
+}
+
+// units are dots and dots do not overlap
+function separate() {
+  const list = G.units;
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i];
+    if (a.dead || isStruct(a) || a.dash) continue;
+    for (let j = i + 1; j < list.length; j++) {
+      const b = list[j];
+      if (b.dead || isStruct(b) || b.dash) continue;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const need = a.r + b.r;
+      let d = len(dx, dy);
+      if (d >= need || d === 0) continue;
+      const push = (need - d) * 0.5, ux = dx / d, uy = dy / d;
+      if (walkableAt(a.x - ux * push, a.y - uy * push)) { a.x -= ux * push; a.y -= uy * push; }
+      if (walkableAt(b.x + ux * push, b.y + uy * push)) { b.x += ux * push; b.y += uy * push; }
+    }
+  }
+}
+
+/* ---------------- projectiles + zones ---------------- */
+
+function stepProjectiles(dt) {
+  for (let i = G.projs.length - 1; i >= 0; i--) {
+    const p = G.projs[i];
+    let dead = false;
+
+    if (p.homing) {
+      const t = G.byId.get(p.homing);
+      if (!t || t.dead) { G.projs.splice(i, 1); continue; }
+      const a = Math.atan2(t.y - p.y, t.x - p.x);
+      const step = p.speed * dt;
+      p.x += Math.cos(a) * step; p.y += Math.sin(a) * step;
+      if (len(t.x - p.x, t.y - p.y) < t.r + p.r) {
+        damage(G.byId.get(p.owner), t, p.dmg, p.type);
+        G.fx.push({ kind: "spark", x: p.x, y: p.y, t: 0.16, life: 0.16, color: p.color });
+        dead = true;
+      }
+    } else {
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      p.life -= dt;
+      if (p.life <= 0 || !walkableAt(p.x, p.y)) dead = true;
+      if (!dead) {
+        for (const o of G.units) {
+          if (o.dead || o.team === p.team || isStruct(o)) continue;
+          if (p.hit && p.hit.has(o.id)) continue;
+          if (len(o.x - p.x, o.y - p.y) > o.r + p.r) continue;
+          damage(G.byId.get(p.owner), o, p.dmg, p.type);
+          if (p.slow) applySlow(o, p.slow[0], p.slow[1]);
+          if (p.stun) applyStun(o, p.stun);
+          G.fx.push({ kind: "spark", x: p.x, y: p.y, t: 0.16, life: 0.16, color: p.color });
+          if (p.hit) p.hit.add(o.id);
+          if (!p.pierce) { dead = true; break; }
+        }
+      }
+    }
+    if (dead) G.projs.splice(i, 1);
+  }
+}
+
+function stepZones(dt) {
+  for (let i = G.zones.length - 1; i >= 0; i--) {
+    const z = G.zones[i];
+    z.t -= dt; z.tick -= dt;
+    if (z.tick <= 0) {
+      z.tick = 0.5;
+      const src = G.byId.get(z.owner);
+      for (const o of G.units) {
+        if (o.dead || o.team === z.team || isStruct(o)) continue;
+        if (len(o.x - z.x, o.y - z.y) > z.r + o.r) continue;
+        damage(src, o, z.dmg, "magic");
+        applySlow(o, z.slow, 0.6);
+      }
+    }
+    if (z.t <= 0) G.zones.splice(i, 1);
+  }
+}
+
+/* ---------------- minion waves ---------------- */
+
+function spawnWave() {
+  G.wave++;
+  const siege = G.wave % 3 === 0 || G.wave >= 9;
+  for (const team of [BLUE, RED]) {
+    const dir = team === BLUE ? 1 : -1;
+    const x0 = (NEXUS_X[team] + dir * 3) * TILE;
+    let n = 0;
+    const order = ["melee", "melee", "melee", "ranged", "ranged"];
+    if (siege) order.push("siege");
+    if (G.wave >= 14) order.push("siege");     // the late game has to arrive on its own
+    for (const type of order) {
+      const m = makeMinion(team, type, 0, x0 + dir * (n * 22));
+      m.yBias = (n % 3 - 1) * 16;
+      n++;
+    }
+  }
+  if (siege && G.wave > 1) say(`Wave ${G.wave} — <b>siege</b>`, "cGold");
+}
+
+/* ==================================================================== *
+ * 13. THE BOT
+ * A lane opponent with a plan: farm, poke, take the fight it is
+ * winning, walk away from the one it is not, and go home to buy.
+ * ==================================================================== */
+
+const BUILD = {
+  VECTOR: ["boots", "blade", "caller", "swift", "fang", "plate"],
+  PULSE: ["boots", "tome", "void", "swift", "hourgl", "aegis"],
+  BULWARK: ["boots", "ruby", "plate", "swift", "fang", "aegis"],
+};
+
+function botThink(u, dt) {
+  if (u.dead) return;
+  u.ai = u.ai || { t: 0, state: "lane" };
+  u.ai.t -= dt;
+
+  // spend skill points: max Q, then E, R whenever it opens
+  while (u.points > 0) {
+    if (levelUp(u, 3)) continue;
+    if (levelUp(u, 0)) continue;
+    if (levelUp(u, 2)) continue;
+    if (levelUp(u, 1)) continue;
+    break;
+  }
+
+  // shopping happens in the fountain, exactly like yours
+  if (u.inFountain) {
+    const build = BUILD[u.champ];
+    for (const id of build) {
+      if (u.items.length >= 6) break;
+      if (u.items.includes(id)) continue;
+      const it = ITEM_BY_ID[id];
+      if (u.gold >= it.price) { u.gold -= it.price; u.items.push(id); recalc(u); }
+      else break;
+    }
+  }
+
+  if (u.recall > 0) return;
+  if (u.ai.t > 0) return;
+  u.ai.t = 0.12;
+
+  const me = u === G.me ? G.bot : G.me;      // "the other dot", whichever side we are
+  const hpPct = u.hp / u.maxHp;
+  const foeAlive = me && !me.dead;
+  const foeSeen = foeAlive && visibleTo(me, u.team);
+  const dFoe = foeAlive ? len(me.x - u.x, me.y - u.y) : 9e9;
+
+  // --- go home when hurt or rich, unless a kill is right there
+  const nextPrice = nextItemPrice(u);
+  const wantsHome = (hpPct < 0.32 && !(foeSeen && me.hp / me.maxHp < 0.22 && dFoe < 320))
+                 || (nextPrice && u.gold >= nextPrice && hpPct < 0.8 && !(foeSeen && dFoe < 420))
+                 || (nextPrice && u.gold >= nextPrice + 900 && !(foeSeen && dFoe < 340));
+  if (wantsHome && !u.inFountain) {
+    if (u.recall <= 0) { u.recall = 5; return; }
+  }
+  if (u.inFountain && (hpPct < 0.92 || u.gold > 1300)) {
+    // wait for the heal and the shop
+    if (hpPct < 0.9) { orderStop(u); return; }
+  }
+
+  const laneYc = LANE_ROW * TILE + TILE / 2;
+  const myTurret = frontTurret(u.team), foeTurret = frontTurret(1 - u.team);
+  const myWave = nearestMinion(u, u.team, 2400);
+  const foeWave = nearestMinion(u, 1 - u.team, 620);
+  const underFoeTurret = foeTurret && len(foeTurret.x - u.x, foeTurret.y - u.y) < foeTurret.stat.range + 30;
+  const alliesNear = G.units.filter((o) => o.kind === "minion" && o.team === u.team && !o.dead && len(o.x - u.x, o.y - u.y) < 300).length;
+
+  // --- never stand under a turret without a wave in front of you
+  const dir = u.team === BLUE ? 1 : -1;          // the way this team pushes
+  if (underFoeTurret && alliesNear === 0) {
+    orderMove(u, clamp(u.x - dir * 300, TILE * 6, WORLD_W - TILE * 6), LANE_ROW * TILE + TILE / 2);
+    return;
+  }
+
+  // --- fight?
+  const power = (c) => (c.hp / c.maxHp) * 0.55 + (c.level / MATCH.xpCap) * 0.25 + (c.items.length / 6) * 0.2;
+  const wantFight = foeSeen && dFoe < 420 && (power(u) > power(me) + 0.08 || me.hp / me.maxHp < 0.35)
+                    && !(underFoeTurret && alliesNear === 0);
+
+  if (foeSeen && dFoe < 520) {
+    castRotation(u, me, wantFight, dFoe);
+  }
+
+  if (wantFight) {
+    // diving is allowed, but only with a wave to hold the turret's attention
+    const dive = foeTurret && len(foeTurret.x - me.x, foeTurret.y - me.y) < foeTurret.stat.range;
+    if (!dive || alliesNear >= 2 || me.hp / me.maxHp < 0.18) { orderAttack(u, me); return; }
+    orderMove(u, u.x - dir * 200, laneYc, true);
+    return;
+  }
+  if (foeSeen && dFoe < 260 && power(u) < power(me) - 0.05) {
+    const away = Math.atan2(u.y - me.y, u.x - me.x);
+    orderMove(u, u.x + Math.cos(away) * 300, u.y + Math.sin(away) * 300);
+    return;
+  }
+
+  // --- farm: last hit if you can, otherwise hold the wave
+  if (foeWave) {
+    const killable = G.units.find((o) => o.kind === "minion" && o.team !== u.team && !o.dead
+      && len(o.x - u.x, o.y - u.y) < attackRange(u) + 130 && o.hp <= u.stat.ad * 1.15);
+    const t = killable || foeWave;
+    if (len(t.x - u.x, t.y - u.y) < attackRange(u) + 40) orderAttack(u, t);
+    else orderMove(u, t.x, t.y, true);
+    return;
+  }
+
+  // --- nothing to farm: walk with your own wave, never ahead of it
+  const laneY = laneYc;
+  const push = foeTurret || G.units.find((o) => o.kind === "nexus" && o.team !== u.team);
+  const waveNearTurret = push && G.units.some((o) => o.kind === "minion" && o.team === u.team && !o.dead
+    && Math.abs(o.x - push.x) < push.stat.range + 60);
+
+  if (push && (waveNearTurret || !foeAlive)) { orderMove(u, push.x, push.y, true); return; }
+  if (myWave) { orderMove(u, myWave.x + dir * 30, laneY, true); return; }
+
+  // no wave anywhere: wait at your own front turret rather than wander into theirs
+  const hold = myTurret ? myTurret.x + dir * 120 : NEXUS_X[u.team] * TILE;
+  orderMove(u, hold, laneY, true);
+}
+
+function castRotation(u, foe, aggressive, d) {
+  const A = u.C.abils;
+  const lead = { x: foe.x, y: foe.y };
+  // lead the shot a little so skillshots are not free to walk out of
+  if (foe.path && foe.path.length) {
+    const p = foe.path[0], l = len(p.x - foe.x, p.y - foe.y) || 1;
+    lead.x += (p.x - foe.x) / l * 46; lead.y += (p.y - foe.y) / l * 46;
+  }
+  const hpPct = foe.hp / foe.maxHp;
+
+  for (let i = 0; i < 4; i++) {
+    if (!canCast(u, i)) continue;
+    const a = A[i];
+    if (a.aim === "self") {
+      if (a.ult) { if (d < a.range * 0.8 && (aggressive || hpPct < 0.4)) tryCast(u, i, foe.x, foe.y); }
+      else if (d < 260 && (aggressive || u.hp / u.maxHp < 0.6)) tryCast(u, i, u.x, u.y);
+      continue;
+    }
+    if (a.name === "BLINK" || a.name === "SIDESTEP") {
+      if (!aggressive && d < 220 && u.hp / u.maxHp < 0.45) {
+        const away = Math.atan2(u.y - foe.y, u.x - foe.x);
+        tryCast(u, i, u.x + Math.cos(away) * a.range, u.y + Math.sin(away) * a.range);
+      } else if (aggressive && d > a.range * 0.8 && d < a.range * 1.6) tryCast(u, i, lead.x, lead.y);
+      continue;
+    }
+    if (a.ult) { if (d < a.range * 0.9 && (hpPct < 0.5 || aggressive)) tryCast(u, i, lead.x, lead.y); continue; }
+    if (d < a.range * 0.92) tryCast(u, i, lead.x, lead.y);
+  }
+}
+
+function nextItemPrice(u) {
+  for (const id of BUILD[u.champ]) if (!u.items.includes(id)) return ITEM_BY_ID[id].price;
+  return 0;
+}
+
+function frontTurret(team) {
+  let best = null;
+  for (const t of G.units) {
+    if (t.kind !== "turret" || t.dead || t.team !== team) continue;
+    if (!best || t.tier < best.tier) best = t;
+  }
+  return best;
+}
+function nearestMinion(u, team, maxD) {
+  let best = null, bd = maxD;
+  for (const o of G.units) {
+    if (o.kind !== "minion" || o.dead || o.team !== team) continue;
+    const d = len(o.x - u.x, o.y - u.y);
+    if (d < bd) { bd = d; best = o; }
+  }
+  return best;
+}
+
+/* ==================================================================== *
+ * 14. RENDER
+ * The board is drawn once into an offscreen canvas and blitted; only
+ * the dots move. Same seamed-grid look as the dot world.
+ * ==================================================================== */
+
+const board = document.getElementById("board");
+const ctx = board.getContext("2d");
+const bg = document.createElement("canvas");
+bg.width = WORLD_W; bg.height = WORLD_H;
+
+const TILE_COLOR = {
+  [WALL]:  "#08080e",
+  [LANE]:  "#1c1c2a",
+  [BRUSH]: "#143320",
+  [RIVER]: "#123047",
+};
+
+function paintBoard() {
+  const c = bg.getContext("2d");
+  c.fillStyle = "#05050a"; c.fillRect(0, 0, WORLD_W, WORLD_H);
+  const S = 1;
+  for (let r = 0; r < MAP_H; r++) {
+    for (let col = 0; col < MAP_W; col++) {
+      const t = at(col, r), x = col * TILE, y = r * TILE;
+      let fill = TILE_COLOR[t];
+      if (t === BASE) fill = col < MAP_W / 2 ? "#0d1224" : "#22101a";
+      c.fillStyle = fill;
+      c.fillRect(x + S, y + S, TILE - S * 2, TILE - S * 2);
+
+      if (t === WALL) {
+        // the dot motif: terrain is a field of dots, not a flat block
+        c.fillStyle = "#12121c";
+        c.beginPath(); c.arc(x + TILE / 2, y + TILE / 2, 3.2, 0, 7); c.fill();
+      } else if (t === BRUSH) {
+        c.fillStyle = "rgba(53,192,90,0.30)";
+        for (let i = 0; i < 3; i++) {
+          c.beginPath();
+          c.arc(x + 6 + (i * 9 % 17), y + 8 + ((i * 13) % 13), 2.6, 0, 7); c.fill();
+        }
+      } else if (t === RIVER) {
+        c.fillStyle = "rgba(35,176,196,0.16)";
+        c.fillRect(x + S, y + TILE / 2 - 1, TILE - S * 2, 2);
+      }
+    }
+  }
+
+  // the lane edge: the line you are not allowed to walk over
+  c.strokeStyle = "rgba(236,234,244,0.13)"; c.lineWidth = 1;
+  for (let col = 6; col < MAP_W - 6; col++) {
+    for (const [r, dy] of [[LANE_TOP, 0], [LANE_BOT, TILE]]) {
+      if (at(col, r + (dy ? 1 : -1)) !== WALL) continue;
+      c.beginPath(); c.moveTo(col * TILE, r * TILE + dy); c.lineTo(col * TILE + TILE, r * TILE + dy); c.stroke();
+    }
+  }
+
+  // lane centre line — the road everything walks
+  c.strokeStyle = "rgba(236,234,244,0.05)";
+  c.setLineDash([9, 11]); c.lineWidth = 2;
+  c.beginPath(); c.moveTo(6 * TILE, LANE_ROW * TILE + TILE / 2); c.lineTo((MAP_W - 6) * TILE, LANE_ROW * TILE + TILE / 2); c.stroke();
+  c.setLineDash([]);
+
+  // fountains
+  for (const team of [BLUE, RED]) {
+    const f = FOUNTAIN[team];
+    c.strokeStyle = TEAM_COLOR[team]; c.globalAlpha = 0.5; c.lineWidth = 2;
+    c.beginPath(); c.arc(f.x, f.y, FOUNTAIN_R, 0, 7); c.stroke();
+    c.globalAlpha = 0.10; c.fillStyle = TEAM_COLOR[team];
+    c.beginPath(); c.arc(f.x, f.y, FOUNTAIN_R, 0, 7); c.fill();
+    c.globalAlpha = 1;
+  }
+}
+paintBoard();
+
+function resize() {
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const w = board.clientWidth, h = board.clientHeight;
+  if (!w || !h) return;
+  board.width = Math.round(w * dpr); board.height = Math.round(h * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  G.view = { w, h, dpr };
+}
+window.addEventListener("resize", resize);
+
+function camUpdate(dt) {
+  const me = G.me;
+  if (!me) return;
+  if (G.cam.lock) {
+    G.cam.x += (me.x - G.view.w / 2 - G.cam.x) * Math.min(1, dt * 9);
+    G.cam.y += (me.y - G.view.h / 2 - G.cam.y) * Math.min(1, dt * 9);
+  }
+  G.cam.x = clamp(G.cam.x, 0, Math.max(0, WORLD_W - G.view.w));
+  G.cam.y = clamp(G.cam.y, -Math.max(0, (G.view.h - WORLD_H) / 2), Math.max(0, WORLD_H - G.view.h));
+  if (G.cam.shake > 0) G.cam.shake = Math.max(0, G.cam.shake - dt * 40);
+}
+
+function draw() {
+  const { w, h } = G.view;
+  const sh = G.cam.shake;
+  const ox = -G.cam.x + (sh ? rand(sh) - sh / 2 : 0);
+  const oy = -G.cam.y + (sh ? rand(sh) - sh / 2 : 0);
+
+  ctx.fillStyle = "#05050a"; ctx.fillRect(0, 0, w, h);
+  ctx.save();
+  ctx.translate(Math.round(ox), Math.round(oy));
+
+  // --- ground
+  ctx.drawImage(bg, 0, 0);
+
+  // --- fog: darken the ground, then punch a hole around everything we own
+  ctx.save();
+  ctx.beginPath(); ctx.rect(G.cam.x, G.cam.y, w, h); ctx.clip();
+  const fog = fogCanvas(w, h);
+  ctx.drawImage(fog, G.cam.x, G.cam.y);
+  ctx.restore();
+
+  // --- zones under everything
+  for (const z of G.zones) {
+    ctx.globalAlpha = 0.16 + Math.sin(G.t * 8) * 0.03;
+    ctx.fillStyle = z.color;
+    ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, 7); ctx.fill();
+    ctx.globalAlpha = 0.5; ctx.strokeStyle = z.color; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, 7); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // --- the order marker
+  if (G.clickFx && G.clickFx.t > 0) {
+    const f = G.clickFx, k = 1 - f.t / 0.4;
+    ctx.strokeStyle = f.color; ctx.globalAlpha = 1 - k; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(f.x, f.y, 6 + k * 16, 0, 7); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // --- aiming
+  drawAim();
+
+  // --- units, structures under dots
+  const order = [...G.units].sort((a, b) => rank(a) - rank(b));
+  for (const u of order) {
+    if (u.dead) continue;
+    if (!visibleTo(u, BLUE)) continue;
+    drawUnit(u);
+  }
+
+  // --- projectiles
+  for (const p of G.projs) {
+    if (!inView(p.x, p.y, 40)) continue;
+    ctx.fillStyle = p.color;
+    if (p.big) {
+      ctx.globalAlpha = 0.35;
+      ctx.fillRect(p.x - 26, p.y - p.r, 52, p.r * 2);
+      ctx.globalAlpha = 1;
+    }
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill();
+  }
+
+  drawFx();
+  drawFloats();
+  ctx.restore();
+}
+
+const rank = (u) => u.kind === "nexus" ? 0 : u.kind === "turret" ? 1 : u.kind === "minion" ? 2 : 3;
+const inView = (x, y, pad) => x > G.cam.x - pad && x < G.cam.x + G.view.w + pad && y > G.cam.y - pad && y < G.cam.y + G.view.h + pad;
+
+let fogCv = null;
+function fogCanvas(w, h) {
+  if (!fogCv) fogCv = document.createElement("canvas");
+  if (fogCv.width !== w || fogCv.height !== h) { fogCv.width = w; fogCv.height = h; }
+  const c = fogCv.getContext("2d");
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.clearRect(0, 0, w, h);
+  c.fillStyle = "rgba(5,5,10,0.80)";
+  c.fillRect(0, 0, w, h);
+  c.globalCompositeOperation = "destination-out";
+  for (const u of G.units) {
+    if (u.team !== BLUE || u.dead) continue;
+    const sx = u.x - G.cam.x, sy = u.y - G.cam.y, r = u.vision;
+    if (sx < -r || sy < -r || sx > w + r || sy > h + r) continue;
+    const g = c.createRadialGradient(sx, sy, r * 0.55, sx, sy, r);
+    g.addColorStop(0, "rgba(0,0,0,1)");
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    c.fillStyle = g;
+    c.beginPath(); c.arc(sx, sy, r, 0, 7); c.fill();
+  }
+  c.globalCompositeOperation = "source-over";
+  return fogCv;
+}
+
+function drawUnit(u) {
+  if (!inView(u.x, u.y, 60)) return;
+  const col = unitColor(u);
+  const flash = u.hitFlash > 0;
+
+  if (u.kind === "nexus") {
+    const open = nexusOpen(u.team);
+    ctx.save(); ctx.translate(u.x, u.y);
+    ctx.rotate(G.t * (open ? 0.9 : 0.25));
+    ctx.strokeStyle = open ? "#ffc53d" : TEAM_COLOR[u.team];
+    ctx.lineWidth = 3; ctx.globalAlpha = open ? 0.95 : 0.55;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.arc(0, 0, u.r + 8 + i * 5, i * 2.1, i * 2.1 + 1.7);
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = flash ? "#fff" : TEAM_COLOR[u.team];
+    ctx.beginPath(); ctx.arc(u.x, u.y, u.r, 0, 7); ctx.fill();
+    ctx.fillStyle = "#05050a";
+    ctx.beginPath(); ctx.arc(u.x, u.y, u.r * 0.42, 0, 7); ctx.fill();
+    hpBar(u, 62, -u.r - 14);
+    return;
+  }
+
+  if (u.kind === "turret") {
+    const open = turretOpen(u);
+    ctx.fillStyle = flash ? "#ffffff" : "#0d0d16";
+    ctx.fillRect(u.x - u.r, u.y - u.r, u.r * 2, u.r * 2);
+    ctx.strokeStyle = TEAM_COLOR[u.team]; ctx.lineWidth = 2;
+    ctx.strokeRect(u.x - u.r + 1, u.y - u.r + 1, u.r * 2 - 2, u.r * 2 - 2);
+    ctx.fillStyle = open ? TEAM_COLOR[u.team] : TEAM_DIM[u.team];
+    ctx.beginPath(); ctx.arc(u.x, u.y, u.r * 0.44, 0, 7); ctx.fill();
+    if (!open) {   // the shield that says "kill the one in front first"
+      ctx.strokeStyle = "rgba(236,234,244,0.35)"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(u.x, u.y, u.r + 7, 0, 7); ctx.stroke();
+    }
+    // the range ring: quiet until you are close enough for it to be your problem
+    const me = G.me;
+    const near = me && !me.dead && len(me.x - u.x, me.y - u.y) < u.stat.range + 130;
+    ctx.save();
+    ctx.setLineDash([7, 9]);
+    ctx.strokeStyle = TEAM_COLOR[u.team];
+    ctx.globalAlpha = near ? (u.team === BLUE ? 0.30 : 0.55) : 0.13;
+    ctx.lineWidth = near && u.team !== BLUE ? 2 : 1;
+    ctx.beginPath(); ctx.arc(u.x, u.y, u.stat.range, 0, 7); ctx.stroke();
+    if (near && u.team !== BLUE) {
+      ctx.globalAlpha = 0.05; ctx.fillStyle = TEAM_COLOR[u.team];
+      ctx.beginPath(); ctx.arc(u.x, u.y, u.stat.range, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+    hpBar(u, 46, -u.r - 12);
+    return;
+  }
+
+  if (u.kind === "minion") {
+    ctx.fillStyle = flash ? "#fff" : col;
+    ctx.beginPath(); ctx.arc(u.x, u.y, u.r, 0, 7); ctx.fill();
+    if (u.type !== "melee") {
+      ctx.strokeStyle = "#05050a"; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.arc(u.x, u.y, u.r * 0.5, 0, 7); ctx.stroke();
+    }
+    if (u.type === "siege") {
+      ctx.strokeStyle = "#ffc53d"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(u.x, u.y, u.r + 3, 0, 7); ctx.stroke();
+    }
+    hpBar(u, 20, -u.r - 7, true);
+    return;
+  }
+
+  // --- a champion
+  const brush = inBrush(u);
+  ctx.globalAlpha = brush ? 0.55 : 1;
+
+  if (u.shieldHp > 0) {
+    ctx.strokeStyle = "#cfd6e6"; ctx.lineWidth = 3; ctx.globalAlpha = 0.8;
+    ctx.beginPath(); ctx.arc(u.x, u.y, u.r + 5, 0, 7); ctx.stroke();
+    ctx.globalAlpha = brush ? 0.55 : 1;
+  }
+  // team ring — you never have to guess whose dot this is
+  ctx.strokeStyle = TEAM_COLOR[u.team]; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(u.x, u.y, u.r + 2.5, 0, 7); ctx.stroke();
+  ctx.fillStyle = flash ? "#ffffff" : col;
+  ctx.beginPath(); ctx.arc(u.x, u.y, u.r, 0, 7); ctx.fill();
+  // the facing tick, so you can read where a skillshot is pointed
+  if (u.facing !== undefined) {
+    ctx.strokeStyle = "#05050a"; ctx.lineWidth = 2.4;
+    ctx.beginPath(); ctx.moveTo(u.x, u.y);
+    ctx.lineTo(u.x + Math.cos(u.facing) * (u.r - 1), u.y + Math.sin(u.facing) * (u.r - 1));
+    ctx.stroke();
+  }
+  if (u.stun > 0) {
+    ctx.strokeStyle = "#ffc53d"; ctx.lineWidth = 2;
+    for (let i = 0; i < 3; i++) {
+      const a = G.t * 5 + i * 2.1;
+      ctx.beginPath(); ctx.arc(u.x + Math.cos(a) * (u.r + 9), u.y + Math.sin(a) * (u.r + 9), 2, 0, 7); ctx.stroke();
+    }
+  }
+  if (u.recall > 0) {
+    ctx.strokeStyle = TEAM_COLOR[u.team]; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(u.x, u.y, u.r + 10, -Math.PI / 2, -Math.PI / 2 + (1 - u.recall / 5) * 6.283); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  hpBar(u, 54, -u.r - 15);
+  // name + level
+  ctx.font = "700 9px ui-monospace, monospace";
+  ctx.textAlign = "center";
+  ctx.fillStyle = u === G.me ? "#eceaf4" : "#9b98b4";
+  ctx.fillText(u.champ + " " + u.level, u.x, u.y - u.r - 19);
+  ctx.textAlign = "left";
+}
+
+function hpBar(u, w, dy, thin) {
+  const h = thin ? 3 : 5;
+  const x = u.x - w / 2, y = u.y + dy;
+  ctx.fillStyle = "#05050a"; ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+  ctx.fillStyle = "#1a1a26"; ctx.fillRect(x, y, w, h);
+  const pct = clamp(u.hp / u.maxHp, 0, 1);
+  ctx.fillStyle = u.team === BLUE ? "#3dff88" : "#ff2e4d";
+  ctx.fillRect(x, y, w * pct, h);
+  if (u.shieldHp > 0) {
+    const sw = Math.min(w * (1 - pct), w * (u.shieldHp / u.maxHp));
+    ctx.fillStyle = "#cfd6e6"; ctx.fillRect(x + w * pct, y, sw, h);
+  }
+  // segment ticks, so you can eyeball a last hit
+  if (!thin) {
+    ctx.fillStyle = "rgba(5,5,10,0.75)";
+    const seg = u.kind === "champ" ? 150 : 100;
+    for (let v = seg; v < u.maxHp; v += seg) ctx.fillRect(x + w * (v / u.maxHp), y, 1, h);
+  }
+}
+
+function drawAim() {
+  const me = G.me;
+  if (!me || me.dead || G.armed < 0) return;
+  const A = me.C.abils[G.armed];
+  const mx = G.mouse.x, my = G.mouse.y;
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,197,61,0.55)"; ctx.lineWidth = 1.5;
+  ctx.setLineDash([6, 6]);
+  ctx.beginPath(); ctx.arc(me.x, me.y, A.aim === "self" ? A.range : A.range, 0, 7); ctx.stroke();
+  ctx.setLineDash([]);
+
+  const a = Math.atan2(my - me.y, mx - me.x);
+  if (A.aim === "line") {
+    ctx.strokeStyle = "rgba(255,197,61,0.85)"; ctx.lineWidth = 12;
+    ctx.globalAlpha = 0.30;
+    ctx.beginPath(); ctx.moveTo(me.x, me.y);
+    ctx.lineTo(me.x + Math.cos(a) * A.range, me.y + Math.sin(a) * A.range); ctx.stroke();
+    ctx.globalAlpha = 1;
+  } else if (A.aim === "point") {
+    const d = Math.min(A.range, len(mx - me.x, my - me.y));
+    const px = me.x + Math.cos(a) * d, py = me.y + Math.sin(a) * d;
+    ctx.strokeStyle = "#ffc53d"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(px, py, A.name === "FIELD" ? 92 : 16, 0, 7); ctx.stroke();
+  } else if (A.aim === "self" && A.range > 0) {
+    ctx.fillStyle = "rgba(255,197,61,0.10)";
+    ctx.beginPath(); ctx.arc(me.x, me.y, A.range, 0, 7); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawFx() {
+  for (const f of G.fx) {
+    const k = 1 - f.t / f.life;
+    let x = f.x, y = f.y;
+    if (f.follow) { const u = G.byId.get(f.follow); if (u) { x = u.x; y = u.y; } }
+    ctx.globalAlpha = Math.max(0, 1 - k);
+    if (f.kind === "ring") {
+      ctx.strokeStyle = f.color; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(x, y, f.r + (f.to - f.r) * k, 0, 7); ctx.stroke();
+    } else if (f.kind === "pop") {
+      ctx.fillStyle = f.color;
+      for (let i = 0; i < 7; i++) {
+        const a = i * 0.9 + f.x;
+        const d = k * (f.r + 22);
+        ctx.beginPath(); ctx.arc(x + Math.cos(a) * d, y + Math.sin(a) * d, 2.6 * (1 - k), 0, 7); ctx.fill();
+      }
+    } else if (f.kind === "spark") {
+      ctx.fillStyle = f.color;
+      ctx.beginPath(); ctx.arc(x, y, 6 * (1 - k), 0, 7); ctx.fill();
+    } else if (f.kind === "slash") {
+      ctx.strokeStyle = f.color; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(x, y, 12 + k * 6, 0, 7); ctx.stroke();
+    } else if (f.kind === "cone") {
+      ctx.fillStyle = f.color; ctx.globalAlpha *= 0.35;
+      ctx.beginPath(); ctx.moveTo(x, y);
+      ctx.arc(x, y, f.range, f.a - f.half, f.a + f.half); ctx.closePath(); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawFloats() {
+  ctx.textAlign = "center";
+  for (const f of G.floats) {
+    const k = 1 - f.t / f.life;
+    ctx.globalAlpha = Math.max(0, 1 - k * k);
+    ctx.font = "900 13px " + getComputedStyle(document.body).getPropertyValue("--display");
+    ctx.fillStyle = f.color;
+    ctx.fillText(f.txt, f.x, f.y - k * 26);
+  }
+  ctx.globalAlpha = 1;
+  ctx.textAlign = "left";
+}
+
+/* ---------------- minimap ---------------- */
+
+const mini = document.getElementById("mini");
+const mctx = mini.getContext("2d");
+function drawMini() {
+  const w = mini.width, h = mini.height;
+  const sx = w / WORLD_W, sy = h / WORLD_H;
+  mctx.fillStyle = "#07070d"; mctx.fillRect(0, 0, w, h);
+  mctx.fillStyle = "#14141e";
+  mctx.fillRect(6 * TILE * sx, LANE_TOP * TILE * sy, (MAP_W - 12) * TILE * sx, (LANE_BOT - LANE_TOP + 1) * TILE * sy);
+  for (const u of G.units) {
+    if (u.dead) continue;
+    if (!visibleTo(u, BLUE)) continue;
+    const x = u.x * sx, y = u.y * sy;
+    if (isStruct(u)) {
+      mctx.fillStyle = TEAM_COLOR[u.team];
+      const s = u.kind === "nexus" ? 5 : 3;
+      mctx.fillRect(x - s / 2, y - s / 2, s, s);
+    } else if (isChamp(u)) {
+      mctx.fillStyle = u === G.me ? "#ffffff" : TEAM_COLOR[u.team];
+      mctx.beginPath(); mctx.arc(x, y, 3, 0, 7); mctx.fill();
+    } else {
+      mctx.fillStyle = TEAM_DIM[u.team];
+      mctx.fillRect(x - 1, y - 1, 2, 2);
+    }
+  }
+  // the viewport box
+  mctx.strokeStyle = "rgba(236,234,244,0.35)"; mctx.lineWidth = 1;
+  mctx.strokeRect(G.cam.x * sx, G.cam.y * sy, G.view.w * sx, G.view.h * sy);
+}
+
+/* ==================================================================== *
+ * 15. SOUND — small square blips, the dot world's own voice
+ * ==================================================================== */
+
+const A = { ctx: null };
+function blip(freq, dur, type, vol) {
+  if (G.muted) return;
+  try {
+    if (!A.ctx) A.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (A.ctx.state === "suspended") A.ctx.resume();
+    const t = A.ctx.currentTime;
+    const o = A.ctx.createOscillator(), g = A.ctx.createGain();
+    o.type = type || "square"; o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(vol == null ? 0.08 : vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(A.ctx.destination);
+    o.start(t); o.stop(t + dur + 0.02);
+  } catch (e) { /* audio is a nicety, never a crash */ }
+}
+
+/* ==================================================================== *
+ * 16. HUD
+ * ==================================================================== */
+
+const $ = (id) => document.getElementById(id);
+const el = {
+  bar: $("bar"), portDot: $("portDot"), portLvl: $("portLvl"), portrait: $("portrait"),
+  hpFill: $("hpFill"), shFill: $("shFill"), hpTxt: $("hpTxt"), mpFill: $("mpFill"),
+  abilities: $("abilities"), items: $("items"), stats: $("stats"), stateLine: $("stateLine"),
+  sBlue: $("sBlue"), sRed: $("sRed"), clock: $("clock"), feed: $("feed"), callout: $("callout"),
+  veil: $("veil"), veilN: $("veilN"), menu: $("menu"), picks: $("picks"),
+  shop: $("shop"), shopGrid: $("shopGrid"), shopGold: $("shopGold"), shopSlots: $("shopSlots"),
+  over: $("over"), overTitle: $("overTitle"), overLine: $("overLine"), again: $("again"),
+};
+
+function say(html, cls) {
+  const d = document.createElement("div");
+  d.innerHTML = html;
+  if (cls) d.className = cls;
+  el.feed.appendChild(d);
+  while (el.feed.children.length > 6) el.feed.removeChild(el.feed.firstChild);
+  setTimeout(() => d.remove(), 6500);
+}
+
+let calloutT = 0;
+function callout(txt, color) {
+  el.callout.textContent = txt;
+  el.callout.style.color = color;
+  calloutT = 1.6;
+}
+
+function buildAbilityBar() {
+  el.abilities.innerHTML = "";
+  G.me.C.abils.forEach((a, i) => {
+    const d = document.createElement("div");
+    d.className = "ab";
+    d.innerHTML = `<span class="k">${a.key}</span><span class="n">${a.name}</span>
+      <span class="cd">0</span><span class="up">+</span>
+      <span class="pips">${'<s></s>'.repeat(a.ult ? 3 : 5)}</span>`;
+    d.title = `${a.name} — ${a.desc}`;
+    d.querySelector(".up").onclick = (e) => { e.stopPropagation(); levelUp(G.me, i); };
+    d.onclick = () => armAbility(i);
+    el.abilities.appendChild(d);
+  });
+  el.items.innerHTML = "";
+  for (let i = 0; i < 6; i++) el.items.appendChild(document.createElement("div"));
+}
+
+function updateHud() {
+  const me = G.me;
+  if (!me) return;
+  el.portDot.style.background = me.C.color;
+  el.portLvl.textContent = me.level;
+  el.portrait.classList.toggle("dead", me.dead);
+
+  const hp = clamp(me.hp / me.maxHp, 0, 1);
+  const sh = clamp(me.shieldHp / me.maxHp, 0, 1);
+  el.hpFill.style.right = (100 - hp * 100) + "%";
+  el.shFill.style.right = (100 - Math.min(100, (hp + sh) * 100)) + "%";
+  el.hpTxt.textContent = `${Math.max(0, Math.round(me.hp))} / ${me.maxHp}` + (me.shieldHp > 1 ? ` +${Math.round(me.shieldHp)}` : "");
+  el.mpFill.style.right = (100 - clamp(me.mp / me.maxMp, 0, 1) * 100) + "%";
+
+  const kids = el.abilities.children;
+  for (let i = 0; i < 4; i++) {
+    const a = me.C.abils[i], d = kids[i];
+    const cd = me.cds[i];
+    d.classList.toggle("cool", cd > 0);
+    d.classList.toggle("locked", me.ranks[i] === 0);
+    d.classList.toggle("ready", me.ranks[i] > 0 && cd <= 0 && me.mp >= a.cost);
+    d.classList.toggle("nomana", me.mp < a.cost);
+    d.classList.toggle("armed", G.armed === i);
+    const cap = a.ult ? 3 : 5;
+    const canLv = me.points > 0 && me.ranks[i] < cap &&
+      (a.ult ? me.level >= 6 + me.ranks[i] * 5 : me.ranks[i] < Math.ceil(me.level / 2) + 1);
+    d.classList.toggle("canlevel", canLv);
+    if (cd > 0) d.querySelector(".cd").textContent = cd > 1 ? Math.ceil(cd) : cd.toFixed(1);
+    const pips = d.querySelectorAll(".pips s");
+    for (let p = 0; p < pips.length; p++) pips[p].classList.toggle("on", p < me.ranks[i]);
+  }
+
+  for (let i = 0; i < 6; i++) {
+    const slot = el.items.children[i], id = me.items[i];
+    slot.className = id ? "on" : "";
+    slot.style.setProperty("--fill", id ? ITEM_BY_ID[id].color : "transparent");
+    slot.title = id ? `${ITEM_BY_ID[id].name} — ${ITEM_BY_ID[id].txt}` : "";
+  }
+
+  el.stats.innerHTML =
+    `<span class="g">◆ ${Math.floor(me.gold)}</span> gold<br>` +
+    `<b>${me.k}</b>/<b>${me.d}</b>/<b>${me.a}</b> &nbsp; CS <b>${me.cs}</b><br>` +
+    `AD <b>${Math.round(me.stat.ad)}</b>` + (me.C.ap ? ` AP <b>${Math.round(me.stat.ap)}</b>` : "") +
+    ` AR <b>${Math.round(me.stat.armor)}</b><br>` +
+    `MR <b>${Math.round(me.stat.mr)}</b> MS <b>${Math.round(moveSpeed(me))}</b> AS <b>${attackSpeed(me).toFixed(2)}</b>`;
+
+  let line = "&nbsp;";
+  if (me.dead) line = `<span style="color:var(--hot)">DEAD — ${me.respawn.toFixed(1)}s</span>`;
+  else if (me.recall > 0) line = `<span style="color:var(--blue)">RECALLING ${me.recall.toFixed(1)}s</span>`;
+  else if (me.inFountain) line = `<span style="color:var(--safe)">FOUNTAIN — press P to shop</span>`;
+  else if (me.points > 0) line = `<span style="color:var(--gold)">${me.points} SKILL POINT${me.points > 1 ? "S" : ""} — ctrl+Q/W/E/R</span>`;
+  el.stateLine.innerHTML = line;
+
+  el.sBlue.textContent = G.kills[BLUE];
+  el.sRed.textContent = G.kills[RED];
+  const s = Math.floor(G.clock);
+  el.clock.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+  el.veil.classList.toggle("on", me.dead);
+  if (me.dead) el.veilN.textContent = Math.ceil(me.respawn);
+}
+
+/* ==================================================================== *
+ * 17. SHOP
+ * ==================================================================== */
+
+function buildShop() {
+  el.shopGrid.innerHTML = "";
+  for (const it of ITEMS) {
+    const b = document.createElement("button");
+    b.className = "item";
+    b.innerHTML = `<i style="background:${it.color}"></i>
+      <span><span class="nm">${it.name}</span><br><span class="st">${it.txt}</span></span>
+      <span class="pr">${it.price}</span>`;
+    b.onclick = () => buy(it);
+    b.dataset.id = it.id;
+    el.shopGrid.appendChild(b);
+  }
+}
+
+function buy(it) {
+  const me = G.me;
+  if (!me.inFountain) { say("You must be in the fountain", "cHot"); return; }
+  if (me.items.length >= 6) { say("No item slots left", "cHot"); return; }
+  if (me.gold < it.price) { say("Not enough gold", "cHot"); return; }
+  me.gold -= it.price; me.items.push(it.id); recalc(me);
+  blip(880, 0.09, "triangle", 0.07);
+  say(`Bought <b>${it.name}</b>`, "cGold");
+  refreshShop();
+}
+
+function refreshShop() {
+  const me = G.me;
+  el.shopGold.textContent = Math.floor(me.gold);
+  el.shopSlots.textContent = `${me.items.length}/6`;
+  for (const b of el.shopGrid.children) {
+    const it = ITEM_BY_ID[b.dataset.id];
+    b.disabled = me.gold < it.price || me.items.length >= 6 || !me.inFountain;
+  }
+}
+
+function toggleShop(force) {
+  const open = force === undefined ? !G.shopOpen : force;
+  if (open && (!G.me || !G.me.inFountain)) { say("Shop only opens in your fountain", "cHot"); return; }
+  G.shopOpen = open;
+  el.shop.hidden = !open;
+  if (open) refreshShop();
+}
+
+/* ==================================================================== *
+ * 18. INPUT
+ * ==================================================================== */
+
+function toWorld(e) {
+  const r = board.getBoundingClientRect();
+  return { x: e.clientX - r.left + G.cam.x, y: e.clientY - r.top + G.cam.y };
+}
+
+board.addEventListener("contextmenu", (e) => e.preventDefault());
+board.addEventListener("mousemove", (e) => {
+  const p = toWorld(e);
+  G.mouse.x = p.x; G.mouse.y = p.y;
+});
+
+board.addEventListener("mousedown", (e) => {
+  if (G.phase !== "play" || !G.me) return;
+  const p = toWorld(e);
+  G.mouse.x = p.x; G.mouse.y = p.y;
+
+  if (e.button === 2) {                       // right click
+    e.preventDefault();
+    if (G.armed >= 0) { G.armed = -1; return; }
+    if (G.me.dead) return;
+    const t = unitUnder(p.x, p.y, 1 - G.me.team);
+    if (t) { orderAttack(G.me, t); clickMark(t.x, t.y, "#ff2e4d"); }
+    else { orderMove(G.me, p.x, p.y, G.pendingAmove); clickMark(p.x, p.y, G.pendingAmove ? "#ffc53d" : "#3dff88"); }
+    G.pendingAmove = false;
+    return;
+  }
+
+  if (e.button === 0) {                       // left click
+    if (G.armed >= 0) {
+      const i = G.armed; G.armed = -1;
+      if (!tryCast(G.me, i, p.x, p.y)) blip(140, 0.06, "square", 0.05);
+      return;
+    }
+    if (G.pendingAmove && !G.me.dead) {
+      orderMove(G.me, p.x, p.y, true); clickMark(p.x, p.y, "#ffc53d");
+      G.pendingAmove = false;
+    }
+  }
+});
+
+function clickMark(x, y, color) { G.clickFx = { x, y, color, t: 0.4 }; }
+
+function unitUnder(x, y, team) {
+  let best = null, bd = 26;
+  for (const u of G.units) {
+    if (u.dead || u.team !== team) continue;
+    if (!visibleTo(u, BLUE)) continue;
+    if (u.kind === "turret" && !turretOpen(u)) continue;
+    if (u.kind === "nexus" && !nexusOpen(u.team)) continue;
+    const d = len(u.x - x, u.y - y) - u.r;
+    if (d < bd) { bd = d; best = u; }
+  }
+  return best;
+}
+
+function armAbility(i) {
+  const me = G.me;
+  if (!me || me.dead) return;
+  const a = me.C.abils[i];
+  if (me.ranks[i] === 0) { say(`${a.name} is not learned — spend a point`, "cHot"); return; }
+  if (me.cds[i] > 0 || me.mp < a.cost) { blip(140, 0.06, "square", 0.05); return; }
+  if (a.aim === "self") { tryCast(me, i, me.x, me.y); return; }
+  G.armed = G.armed === i ? -1 : i;
+}
+
+const KEY_ABIL = { q: 0, w: 1, e: 2, r: 3 };
+
+window.addEventListener("keydown", (e) => {
+  const k = e.key.toLowerCase();
+  if (k === "m") { G.muted = !G.muted; say(G.muted ? "Muted" : "Unmuted", "cGold"); return; }
+  if (G.phase !== "play" || !G.me) return;
+
+  if (k === "escape") { G.armed = -1; if (G.shopOpen) toggleShop(false); return; }
+  if (k === "p") { e.preventDefault(); toggleShop(); return; }
+  if (G.shopOpen) return;
+
+  if (k in KEY_ABIL) {
+    e.preventDefault();
+    const i = KEY_ABIL[k];
+    if (e.ctrlKey || e.metaKey || e.shiftKey) { levelUp(G.me, i); return; }
+    armAbility(i);
+    return;
+  }
+  if (k === "a") { G.pendingAmove = true; G.armed = -1; return; }
+  if (k === "s") { orderStop(G.me); G.armed = -1; return; }
+  if (k === "b") {
+    if (G.me.dead) return;
+    if (G.me.recall > 0) { G.me.recall = 0; say("Recall cancelled"); }
+    else if (G.me.inFountain) say("Already home", "cGold");
+    else { G.me.recall = 5; orderStop(G.me); }
+    return;
+  }
+  if (k === " ") { e.preventDefault(); G.cam.lock = true; return; }
+  if (k === "y") { G.cam.lock = !G.cam.lock; say("Camera " + (G.cam.lock ? "locked" : "free"), "cGold"); }
+});
+
+// edge scroll with the camera unlocked, and minimap clicks
+board.addEventListener("mouseleave", () => { G.edge = null; });
+mini.addEventListener("mousedown", (e) => {
+  const r = mini.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width * WORLD_W;
+  const y = (e.clientY - r.top) / r.height * WORLD_H;
+  G.cam.lock = false;
+  G.cam.x = x - G.view.w / 2; G.cam.y = y - G.view.h / 2;
+});
+
+/* ==================================================================== *
+ * 19. MATCH
+ * ==================================================================== */
+
+function buildPicks() {
+  el.picks.innerHTML = "";
+  for (const key of CHAMP_KEYS) {
+    const C = CHAMPS[key];
+    const b = document.createElement("button");
+    b.className = "pick";
+    b.innerHTML = `<div class="dot" style="background:${C.color}"></div>
+      <h3>${C.name}</h3><div class="role">${C.role}${C.ranged ? " · ranged" : " · melee"}</div>
+      <ul>${C.abils.map((a) => `<li><b>${a.key}</b> ${a.name} — ${a.desc}</li>`).join("")}</ul>`;
+    b.onclick = () => startMatch(key);
+    el.picks.appendChild(b);
+  }
+}
+
+function startMatch(champKey) {
+  G.units.length = 0; G.projs.length = 0; G.zones.length = 0; G.fx.length = 0; G.floats.length = 0;
+  G.byId.clear(); G.nextId = 1;
+  G.clock = 0; G.wave = 0; G.nextWave = MATCH.firstWave;
+  G.kills = [0, 0]; G.nexusDown = -1; G.armed = -1; G.pendingAmove = false;
+  G.shopOpen = false; el.shop.hidden = true; el.over.hidden = true; el.feed.innerHTML = "";
+
+  for (const team of [BLUE, RED]) {
+    for (const d of TURRETS[team]) makeTurret(team, d);
+    makeNexus(team);
+  }
+
+  G.me = makeChamp(BLUE, champKey, false);
+  const others = CHAMP_KEYS.filter((k) => k !== champKey);
+  G.bot = makeChamp(RED, others[randInt(others.length)], true);
+
+  G.cam.lock = true;
+  G.cam.x = G.me.x - G.view.w / 2; G.cam.y = G.me.y - G.view.h / 2;
+
+  buildAbilityBar();
+  buildShop();
+  el.menu.hidden = true;
+  el.bar.classList.remove("hidden");
+  G.phase = "play";
+  resize();
+  say(`<b class="cRed">${G.bot.champ}</b> is on the other side`, "cGold");
+  callout("MINIONS IN " + MATCH.firstWave + "s", "#ffc53d");
+  blip(440, 0.12, "triangle", 0.08);
+}
+
+function finish(winner) {
+  G.phase = "over";
+  const won = winner === BLUE;
+  el.overTitle.innerHTML = won ? "VICTORY" : "<em>DEFEAT</em>";
+  el.overTitle.style.color = won ? "var(--safe)" : "";
+  const me = G.me;
+  el.overLine.innerHTML =
+    `${me.champ} · ${me.k}/${me.d}/${me.a} · ${me.cs} CS · level ${me.level} · ${Math.floor(me.gold)} gold left<br>` +
+    `${Math.floor(G.clock / 60)}m ${Math.floor(G.clock % 60)}s · ${TEAM_NAME[BLUE]} ${G.kills[BLUE]} — ${G.kills[RED]} ${TEAM_NAME[RED]}`;
+  el.over.hidden = false;
+  el.veil.classList.remove("on");
+  G.cam.shake = 18;
+  blip(won ? 660 : 160, 0.5, won ? "triangle" : "sawtooth", 0.1);
+  if (window.DotLegend && window.DotLegend.onEnd) window.DotLegend.onEnd(won ? "win" : "loss", window.DotLegend.state());
+}
+
+el.again.onclick = () => {
+  el.over.hidden = true;
+  el.bar.classList.add("hidden");
+  el.menu.hidden = false;
+  G.phase = "menu";
+};
+
+/* ==================================================================== *
+ * 20. LOOP
+ * ==================================================================== */
+
+function stepGame(dt) {
+  G.clock += dt;
+
+  if (G.clock >= G.nextWave) { spawnWave(); G.nextWave += MATCH.waveEvery; }
+
+  for (const u of G.units) stepUnit(u, dt);
+  if (G.bot && G.phase === "play") botThink(G.bot, dt);
+  if (G.auto && G.me && G.phase === "play") botThink(G.me, dt);   // attract mode / demo
+  separate();
+  stepProjectiles(dt);
+  stepZones(dt);
+
+  // clean up the dead that leave a corpse behind (champs stay in the list)
+  for (let i = G.units.length - 1; i >= 0; i--) {
+    const u = G.units[i];
+    if (u.dead && (u.kind === "turret" || u.kind === "nexus")) {
+      G.units.splice(i, 1); G.byId.delete(u.id);
+    }
+  }
+
+  for (let i = G.fx.length - 1; i >= 0; i--) { G.fx[i].t -= dt; if (G.fx[i].t <= 0) G.fx.splice(i, 1); }
+  for (let i = G.floats.length - 1; i >= 0; i--) { G.floats[i].t -= dt; if (G.floats[i].t <= 0) G.floats.splice(i, 1); }
+  if (G.clickFx) G.clickFx.t -= dt;
+
+  if (G.shopOpen) {
+    refreshShop();
+    if (!G.me.inFountain) toggleShop(false);
+  }
+}
+
+let last = performance.now();
+function frame(ts) {
+  const dt = Math.min(0.05, (ts - last) / 1000);
+  last = ts;
+  G.t += dt; G.dt = dt;
+
+  // the HUD changes height as it fills in; the canvas has to follow or circles turn to ellipses
+  if (board.clientWidth !== G.view.w || board.clientHeight !== G.view.h) resize();
+
+  if (G.phase === "play" && !G.shopOpen) stepGame(dt);
+  if (G.phase !== "menu") {
+    camUpdate(dt);
+    draw();
+    drawMini();
+    updateHud();
+  }
+
+  if (calloutT > 0) {
+    calloutT -= dt;
+    el.callout.style.opacity = calloutT > 1.2 ? (1.6 - calloutT) / 0.4 : Math.min(1, calloutT / 0.6);
+  } else el.callout.style.opacity = 0;
+
+  requestAnimationFrame(frame);
+}
+
+buildPicks();
+resize();
+requestAnimationFrame(frame);
+
+/* ==================================================================== *
+ * 21. THE DOOR INTO THE DOT WORLD
+ * The whole game is one object. Drop this file in an iframe, or call
+ * DotLegend.mount(el) from the dot world and it takes over that box.
+ * ==================================================================== */
+
+window.DotLegend = {
+  version: "0.1.0",
+  champions: CHAMP_KEYS,
+  start: (champ) => startMatch(champ || CHAMP_KEYS[0]),
+  // hand your own dot to the lane AI — the dot world can run this as an attract screen
+  autoplay: (on) => { G.auto = on !== false; return G.auto; },
+  state: () => ({
+    phase: G.phase, clock: G.clock, kills: [...G.kills],
+    me: G.me && { champ: G.me.champ, level: G.me.level, k: G.me.k, d: G.me.d, a: G.me.a, cs: G.me.cs, gold: Math.floor(G.me.gold) },
+  }),
+  // the dot world can listen for the result without owning the game
+  onEnd: null,
+};
+</script>
