@@ -38,8 +38,18 @@ The League rules that make a lane a lane are all here:
   starts, so your first item is bought before minions spawn. Going home for the
   next one costs you the lane.
 
-The camera sits close, the way a MOBA camera does — you see the fight you are in,
-not the whole map. The minimap is how you know what is happening elsewhere.
+The camera sits close and locks dead centre on your dot, the way a MOBA camera
+does — you see the fight you are in, not the whole map. The minimap is how you
+know what is happening elsewhere.
+
+**Minions never push you.** A champion absorbs none of a minion's overlap, so you
+walk straight through a wave instead of being shoved around by it. Champions
+still collide with each other.
+
+**The pace is yours.** `[` and `]` scale the whole simulation between 0.5x and
+1.5x, live, and the bar shows where you are. It ships at 0.9x. Everything scales
+together — movement, attacks, cooldowns, wave timers — so nothing gets out of
+step with anything else.
 
 ## Controls
 
@@ -47,7 +57,8 @@ not the whole map. The minimap is how you know what is happening elsewhere.
 |---|---|
 | Right click | Move there. **Hold** it and your dot follows the cursor. |
 | Right click an enemy | Attack that dot until it dies. |
-| `Q` `W` `E` `R` | Abilities. Click to aim, right click to cancel. |
+| `Q` `W` `E` `R` | Cast at your cursor immediately. Click the icon instead to aim first. |
+| `[` `]` | Slow the whole game down or speed it up, any time. |
 | `Ctrl` + `Q/W/E/R` | Spend a skill point (or click the `+` on the icon). |
 | `A` then click | Attack-move: walk there, hit whatever you meet. |
 | `S` | Stop. |

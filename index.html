@@ -143,6 +143,18 @@
   @keyframes pulse { 50% { background: #14120a; } }
   @media (prefers-reduced-motion: reduce) { #shopBtn.open { animation: none; background: #14120a; } }
 
+  /* the pace control: the game runs at whatever speed suits you */
+  #speed { display: flex; align-items: center; gap: 3px; height: 50px; }
+  #speed button {
+    width: 20px; height: 26px; background: #07070d; border: 1px solid var(--edge);
+    color: var(--muted); font-family: var(--display); font-size: 13px; cursor: pointer; line-height: 1;
+  }
+  #speed button:hover { color: var(--ink); border-color: var(--gold); }
+  #speed b {
+    font-family: var(--display); font-size: 13px; width: 40px; text-align: center;
+    font-variant-numeric: tabular-nums; color: var(--ink);
+  }
+
   /* stats + minimap */
   #stats { display: block; font-size: 10px; color: var(--muted); line-height: 1.5; white-space: nowrap; }
   #stats b { color: var(--ink); font-variant-numeric: tabular-nums; }
@@ -273,7 +285,7 @@
         <div class="keys-grid">
           <kbd>Right click</kbd><span>Move. <b>Hold</b> it and your dot follows the cursor.</span>
           <kbd>Right click enemy</kbd><span>Attack that dot until it dies.</span>
-          <kbd>Q W E R</kbd><span>Abilities. Click to aim, right click to cancel.</span>
+          <kbd>Q W E R</kbd><span>Cast at your cursor, straight away. Click the icon instead to aim first.</span>
           <kbd>Ctrl + Q/W/E/R</kbd><span>Spend a skill point (or click the <b>+</b>).</span>
           <kbd>A</kbd><span>Attack-move: walk there, hit whatever you meet.</span>
           <kbd>S</kbd><span>Stop.</span>
@@ -281,6 +293,7 @@
           <kbd>P</kbd><span>Shop. Only opens in your fountain.</span>
           <kbd>Space</kbd><span>Snap the camera back to your dot. <b>Y</b> unlocks it.</span>
           <kbd>Scroll</kbd><span>Zoom the camera in and out.</span>
+          <kbd>[ &nbsp;]</kbd><span>Slow the whole game down or speed it up, any time.</span>
           <kbd>M</kbd><span>Mute.</span>
         </div>
         <p class="tag" style="max-width:52ch">Last-hit minions for gold. Outer turret first — the ones behind it
@@ -329,6 +342,14 @@
       <div class="lbl">Gold</div>
       <button id="shopBtn"><b id="shopBtnGold">500</b><span>SHOP · P</span></button>
     </div>
+    <div class="cell">
+      <div class="lbl">Pace</div>
+      <div id="speed">
+        <button data-d="-1" title="Slower ( [ )">&minus;</button>
+        <b id="speedV">0.9&times;</b>
+        <button data-d="1" title="Faster ( ] )">+</button>
+      </div>
+    </div>
     <div class="cell"><div id="stats"></div></div>
     <div class="cell"><canvas id="mini" width="248" height="56"></canvas></div>
   </div>
@@ -351,7 +372,7 @@ const WORLD_W = MAP_W * TILE, WORLD_H = MAP_H * TILE;
 const WALL = 0, LANE = 1, BRUSH = 2, BASE = 3, RIVER = 4;
 
 const LANE_ROW = 13;                 // the centre line everything walks
-const LANE_TOP = 10, LANE_BOT = 16;  // walkable band
+const LANE_TOP = 9, LANE_BOT = 17;   // walkable band — wide enough to walk around a wave
 const RIVER_X0 = 57, RIVER_X1 = 62;
 
 const BLUE = 0, RED = 1;
@@ -425,9 +446,9 @@ const MATCH = {
 const XP_FOR_LEVEL = (l) => Math.round(190 + 110 * l + 9 * l * l);
 
 const MINION = {
-  melee:  { hp: 460, ad: 13, range: 40,  ms: 66,  gold: 21, xp: 60,  r: 10,  armor: 2, aspd: 1.1 },
-  ranged: { hp: 320, ad: 24, range: 190, ms: 66,  gold: 15, xp: 44,  r: 9,   armor: 0, aspd: 0.9 },
-  siege:  { hp: 900, ad: 42, range: 230, ms: 60,  gold: 46, xp: 96,  r: 13,  armor: 8, aspd: 0.7 },
+  melee:  { hp: 460, ad: 13, range: 40,  ms: 74,  gold: 21, xp: 60,  r: 10,  armor: 2, aspd: 1.1 },
+  ranged: { hp: 320, ad: 24, range: 190, ms: 74,  gold: 15, xp: 44,  r: 9,   armor: 0, aspd: 0.9 },
+  siege:  { hp: 900, ad: 42, range: 230, ms: 68,  gold: 46, xp: 96,  r: 13,  armor: 8, aspd: 0.7 },
 };
 
 const TURRET_STATS = [
@@ -451,14 +472,14 @@ const CHAMPS = {
     name: "VECTOR", role: "Marksman", color: "#f2c230",
     blurb: "Long range, no health. Every fight is a spacing puzzle.",
     hp: 545, hpG: 92, mp: 340, mpG: 40, ad: 62, adG: 3.4, armor: 20, armorG: 3.8,
-    mr: 24, mrG: 1.4, ms: 108, aspd: 0.68, aspdG: 0.031, range: 210, ranged: true, r: 13,
+    mr: 24, mrG: 1.4, ms: 84, aspd: 0.68, aspdG: 0.031, range: 210, ranged: true, r: 13,
     hpReg: 5.5, mpReg: 7.5,
     tips: ["Q pierces everything in a line", "W is your only escape", "R can finish across the screen"],
     abils: [
       { key: "Q", name: "PIERCE", cd: [9, 8.2, 7.4, 6.6, 5.8], cost: 45, range: 760, aim: "line",
         desc: "A bolt through everything in a line.",
         dmg: (u, k) => 34 + 26 * k + 0.95 * ad(u),
-        cast(u, tx, ty) { lineShot(u, tx, ty, 760, 15, this.dmg(u, u.ranks[0]), "phys", { pierce: true, speed: 660, color: "#f2c230" }); } },
+        cast(u, tx, ty) { lineShot(u, tx, ty, 760, 15, this.dmg(u, u.ranks[0]), "phys", { pierce: true, speed: 520, color: "#f2c230" }); } },
       { key: "W", name: "SIDESTEP", cd: [16, 14.5, 13, 11.5, 10], cost: 40, range: 230, aim: "point", ct: 0,
         desc: "Hop 230 and move faster for 2s.",
         cast(u, tx, ty) { dashTo(u, tx, ty, 230, 620); buff(u, "ms", 0.28, 2); } },
@@ -468,7 +489,7 @@ const CHAMPS = {
       { key: "R", name: "SNIPE", cd: [90, 80, 70], cost: 100, range: 1500, aim: "line", ult: true,
         desc: "A shot the length of the lane. First dot hit takes it all.",
         dmg: (u, k) => 170 + 110 * k + 1.25 * ad(u),
-        cast(u, tx, ty) { lineShot(u, tx, ty, 1500, 17, this.dmg(u, u.ranks[3]), "phys", { speed: 1150, color: "#fff2b0", big: true }); } },
+        cast(u, tx, ty) { lineShot(u, tx, ty, 1500, 17, this.dmg(u, u.ranks[3]), "phys", { speed: 900, color: "#fff2b0", big: true }); } },
     ],
   },
 
@@ -476,14 +497,14 @@ const CHAMPS = {
     name: "PULSE", role: "Mage", color: "#b45bd8",
     blurb: "Zones the ground, then deletes whoever stayed on it.",
     hp: 620, hpG: 100, mp: 480, mpG: 56, ad: 53, adG: 2.7, armor: 22, armorG: 4,
-    mr: 30, mrG: 1.6, ms: 106, aspd: 0.62, aspdG: 0.018, range: 200, ranged: true, r: 13,
+    mr: 30, mrG: 1.6, ms: 82, aspd: 0.62, aspdG: 0.018, range: 200, ranged: true, r: 13,
     hpReg: 6, mpReg: 10, ap: true,
     tips: ["W slows the ground for 3s", "E blinks through terrain", "R is the whole teamfight"],
     abils: [
       { key: "Q", name: "BOLT", cd: [7, 6.4, 5.8, 5.2, 4.6], cost: 40, range: 700, aim: "line",
         desc: "A slowing bolt. Stops on the first dot.",
         dmg: (u, k) => 48 + 30 * k + 0.65 * ap(u),
-        cast(u, tx, ty) { lineShot(u, tx, ty, 700, 13, this.dmg(u, u.ranks[0]), "magic", { speed: 560, color: "#b45bd8", slow: [0.3, 1.2] }); } },
+        cast(u, tx, ty) { lineShot(u, tx, ty, 700, 13, this.dmg(u, u.ranks[0]), "magic", { speed: 440, color: "#b45bd8", slow: [0.3, 1.2] }); } },
       { key: "W", name: "FIELD", cd: [14, 13, 12, 11, 10], cost: 65, range: 620, aim: "point",
         desc: "A pool that burns and slows for 3s.",
         cast(u, tx, ty) {
@@ -509,7 +530,7 @@ const CHAMPS = {
     name: "BULWARK", role: "Fighter", color: "#35c05a",
     blurb: "Walks in, and the fight happens where it lands.",
     hp: 790, hpG: 132, mp: 320, mpG: 38, ad: 68, adG: 4, armor: 38, armorG: 5.4,
-    mr: 32, mrG: 1.6, ms: 118, aspd: 0.66, aspdG: 0.026, range: 95, ranged: false, r: 14,
+    mr: 32, mrG: 1.6, ms: 90, aspd: 0.66, aspdG: 0.026, range: 95, ranged: false, r: 14,
     hpReg: 9, mpReg: 7,
     tips: ["E charges in and stuns", "W is a shield, not a heal", "R hits everything around you"],
     abils: [
@@ -550,7 +571,7 @@ const ITEMS = [
   { id: "blade",  name: "Long Blade",   price: 350,  color: "#e0334a", stats: { ad: 12 },                    txt: "+12 attack damage" },
   { id: "tome",   name: "Amp Tome",     price: 400,  color: "#b45bd8", stats: { ap: 22 },                    txt: "+22 ability power" },
   { id: "ruby",   name: "Ruby Shard",   price: 400,  color: "#35c05a", stats: { hp: 180 },                   txt: "+180 health" },
-  { id: "boots",  name: "Boots",        price: 300,  color: "#23b0c4", stats: { ms: 24 },                    txt: "+24 move speed" },
+  { id: "boots",  name: "Boots",        price: 300,  color: "#23b0c4", stats: { ms: 18 },                    txt: "+18 move speed" },
   { id: "cloak",  name: "Iron Cloak",   price: 450,  color: "#7c7a95", stats: { armor: 18, mr: 14 },         txt: "+18 armor, +14 magic resist" },
 
   { id: "fang",   name: "Bloodfang",    price: 2700, color: "#e0334a", stats: { ad: 45, lifesteal: 0.14 },   txt: "+45 AD, 14% lifesteal" },
@@ -558,7 +579,7 @@ const ITEMS = [
   { id: "void",   name: "Voidshard",    price: 2650, color: "#b45bd8", stats: { ap: 85, mp: 260 },           txt: "+85 AP, +260 mana" },
   { id: "plate",  name: "Bulwark Plate",price: 2700, color: "#35c05a", stats: { hp: 420, armor: 45 },        txt: "+420 health, +45 armor" },
   { id: "aegis",  name: "Aegis",        price: 2400, color: "#4a7bf0", stats: { hp: 280, mr: 50, hpReg: 8 }, txt: "+280 health, +50 MR, regen" },
-  { id: "swift",  name: "Swiftboots",   price: 900,  color: "#23b0c4", stats: { ms: 58 },                    txt: "+58 move speed" },
+  { id: "swift",  name: "Swiftboots",   price: 900,  color: "#23b0c4", stats: { ms: 44 },                    txt: "+44 move speed" },
   { id: "hourgl", name: "Hourglass",    price: 2500, color: "#ffc53d", stats: { ap: 55, armor: 35, hp: 150 },txt: "+55 AP, +35 armor, +150 HP" },
 ];
 const ITEM_BY_ID = Object.fromEntries(ITEMS.map((i) => [i.id, i]));
@@ -580,6 +601,7 @@ const G = {
   mouse: { sx: 0, sy: 0, x: 0, y: 0, down: false },
   armed: -1,               // ability index waiting for a click
   shopOpen: false, muted: false,
+  speed: 0.9,              // game pace, yours to set: 0.5x to 1.5x
   view: { w: 100, h: 100, dpr: 1 },
   paused: false,
 };
@@ -623,7 +645,7 @@ function makeChamp(team, key, isBot) {
     level: 1, xp: 0, gold: MATCH.startGold, points: 1, inFountain: true,
     ranks: [0, 0, 0, 0], cds: [0, 0, 0, 0],
     items: [], k: 0, d: 0, a: 0, cs: 0,
-    dead: false, respawn: 0, recall: 0, vision: 300,
+    dead: false, respawn: 0, recall: 0, vision: 360,
     stance: "hold",
   });
   recalc(u, true);
@@ -631,11 +653,11 @@ function makeChamp(team, key, isBot) {
   return u;
 }
 
-function makeMinion(team, type, lane, x) {
+function makeMinion(team, type, x, yBias) {
   const M = MINION[type];
   const u = addUnit({
-    kind: "minion", type, team, M,
-    x, y: LANE_ROW * TILE + TILE / 2 + (Math.random() - 0.5) * TILE * 2.2,
+    kind: "minion", type, team, M, yBias,
+    x, y: LANE_ROW * TILE + TILE / 2 + yBias,
     r: M.r, hp: M.hp, maxHp: M.hp, vision: 190,
     stat: { ad: M.ad, ap: 0, armor: M.armor, mr: 0, ms: M.ms, aspd: M.aspd, range: M.range, lifesteal: 0 },
   });
@@ -949,7 +971,7 @@ function autoAttack(u, tgt) {
   const ranged = u.kind === "champ" ? u.C.ranged : (u.stat.range > 90);
   if (ranged) {
     G.projs.push({
-      x: u.x, y: u.y, tx: tgt.x, ty: tgt.y, homing: tgt.id, speed: u.kind === "turret" ? 700 : 440,
+      x: u.x, y: u.y, tx: tgt.x, ty: tgt.y, homing: tgt.id, speed: u.kind === "turret" ? 560 : 360,
       team: u.team, owner: u.id, dmg, type: "phys", r: u.kind === "turret" ? 6 : 4.5,
       color: u.kind === "turret" ? TEAM_COLOR[u.team] : unitColor(u), single: true,
     });
@@ -1267,7 +1289,7 @@ function stepUnit(u, dt) {
       if (u.atkCd <= 0) {
         const mult = 1 + Math.min(0.5, u.ramp * 0.16);
         u.atkCd = 1 / u.stat.aspd;
-        G.projs.push({ x: u.x, y: u.y - 8, homing: t.id, speed: 560, team: u.team, owner: u.id,
+        G.projs.push({ x: u.x, y: u.y - 8, homing: t.id, speed: 460, team: u.team, owner: u.id,
           dmg: u.stat.ad * mult, type: "phys", r: 7, color: TEAM_COLOR[u.team], single: true });
         u.ramp++;
       }
@@ -1283,10 +1305,13 @@ function stepUnit(u, dt) {
       if (u.atkCd <= 0) autoAttack(u, t);
       return;
     }
-    if (t && len(t.x - u.x, t.y - u.y) < 260) { moveToward(u, t.x, t.y, dt); return; }
-    const goal = enemyNexusPoint(u.team);
-    const laneY = LANE_ROW * TILE + TILE / 2;
-    moveToward(u, goal.x, u.y + clamp(laneY + (u.yBias || 0) - u.y, -40, 40), dt);
+    // step to a target that is nearly in reach, but never abandon the line to chase
+    if (t && len(t.x - u.x, t.y - u.y) < attackRange(u) + 90) { moveToward(u, t.x, t.y, dt); return; }
+    // otherwise march: aim at a point down the lane on your own row, so the
+    // formation holds instead of collapsing toward the centre line
+    const dir = u.team === BLUE ? 1 : -1;
+    const laneY = LANE_ROW * TILE + TILE / 2 + (u.yBias || 0);
+    moveToward(u, u.x + dir * 200, laneY, dt);
     return;
   }
 
@@ -1323,7 +1348,9 @@ function stepUnit(u, dt) {
   } else u.target = null;
 }
 
-// units are dots and dots do not overlap
+// Dots do not overlap — but a champion is never shoved by a minion. Being
+// pushed around by the wave is the single worst thing a MOBA can do to your
+// hands, so minions give way and champions walk straight through them.
 function separate() {
   const list = G.units;
   for (let i = 0; i < list.length; i++) {
@@ -1334,11 +1361,18 @@ function separate() {
       if (b.dead || isStruct(b) || b.dash) continue;
       const dx = b.x - a.x, dy = b.y - a.y;
       const need = a.r + b.r;
-      let d = len(dx, dy);
+      const d = len(dx, dy);
       if (d >= need || d === 0) continue;
-      const push = (need - d) * 0.5, ux = dx / d, uy = dy / d;
-      if (walkableAt(a.x - ux * push, a.y - uy * push)) { a.x -= ux * push; a.y -= uy * push; }
-      if (walkableAt(b.x + ux * push, b.y + uy * push)) { b.x += ux * push; b.y += uy * push; }
+
+      // how much of the overlap each one absorbs: a champion absorbs none of a
+      // minion's, and minions between two champions get squeezed out of the way
+      let wa = 0.5, wb = 0.5;
+      if (isChamp(a) && !isChamp(b)) { wa = 0; wb = 1; }
+      else if (isChamp(b) && !isChamp(a)) { wa = 1; wb = 0; }
+
+      const push = need - d, ux = dx / d, uy = dy / d;
+      if (wa && walkableAt(a.x - ux * push * wa, a.y - uy * push * wa)) { a.x -= ux * push * wa; a.y -= uy * push * wa; }
+      if (wb && walkableAt(b.x + ux * push * wb, b.y + uy * push * wb)) { b.x += ux * push * wb; b.y += uy * push * wb; }
     }
   }
 }
@@ -1403,21 +1437,26 @@ function stepZones(dt) {
 
 /* ---------------- minion waves ---------------- */
 
+// A wave is a formation, not a bag of dots: melee abreast in front, ranged
+// behind them, siege at the back. Each minion keeps its own row for the whole
+// walk, so the wave arrives as a line you can read and last-hit off.
+const RANKS = [
+  { type: "melee",  rows: [-54, 0, 54] },
+  { type: "ranged", rows: [-28, 28] },
+];
+
 function spawnWave() {
   G.wave++;
   const siege = G.wave % 3 === 0 || G.wave >= 9;
   for (const team of [BLUE, RED]) {
     const dir = team === BLUE ? 1 : -1;
     const x0 = (NEXUS_X[team] + dir * 3) * TILE;
-    let n = 0;
-    const order = ["melee", "melee", "melee", "ranged", "ranged"];
-    if (siege) order.push("siege");
-    if (G.wave >= 14) order.push("siege");     // the late game has to arrive on its own
-    for (const type of order) {
-      const m = makeMinion(team, type, 0, x0 + dir * (n * 22));
-      m.yBias = (n % 3 - 1) * 16;
-      n++;
+    let rank = 0;
+    for (const r of RANKS) {
+      for (const row of r.rows) makeMinion(team, r.type, x0 - dir * rank * 46, row);
+      rank++;
     }
+    if (siege) makeMinion(team, "siege", x0 - dir * rank * 46, 0);
   }
   if (siege && G.wave > 1) say(`Wave ${G.wave} — <b>siege</b>`, "cGold");
 }
@@ -1696,8 +1735,10 @@ function camUpdate(dt) {
   if (!me) return;
   const vw = viewW(), vh = viewH();
   if (G.cam.lock) {
-    G.cam.x += (me.x - vw / 2 - G.cam.x) * Math.min(1, dt * 10);
-    G.cam.y += (me.y - vh / 2 - G.cam.y) * Math.min(1, dt * 10);
+    // Hard lock. A lerped camera makes the world slide out from under your dot
+    // and every click land slightly off — you are always exactly in the middle.
+    G.cam.x = me.x - vw / 2;
+    G.cam.y = me.y - vh / 2;
   }
   G.cam.x = clamp(G.cam.x, 0, Math.max(0, WORLD_W - vw));
   G.cam.y = clamp(G.cam.y, -Math.max(0, (vh - WORLD_H) / 2), Math.max(0, WORLD_H - vh));
@@ -2109,9 +2150,16 @@ const el = {
   veil: $("veil"), veilN: $("veilN"), menu: $("menu"), picks: $("picks"),
   shop: $("shop"), shopGrid: $("shopGrid"), shopGold: $("shopGold"), shopSlots: $("shopSlots"),
   over: $("over"), overTitle: $("overTitle"), overLine: $("overLine"), again: $("again"),
-  shopBtn: $("shopBtn"), shopBtnGold: $("shopBtnGold"),
+  shopBtn: $("shopBtn"), shopBtnGold: $("shopBtnGold"), speedV: $("speedV"),
 };
 el.shopBtn.onclick = () => toggleShop();
+
+function setSpeed(v) {
+  G.speed = clamp(Math.round(v * 10) / 10, 0.5, 1.5);
+  el.speedV.textContent = G.speed.toFixed(1) + "\u00d7";
+}
+for (const b of $("speed").querySelectorAll("button"))
+  b.onclick = () => setSpeed(G.speed + 0.1 * Number(b.dataset.d));
 
 function say(html, cls) {
   const d = document.createElement("div");
@@ -2337,14 +2385,33 @@ function unitUnder(x, y, team) {
   return best;
 }
 
+// Pressing the key casts straight away at wherever the cursor is. Two actions
+// for one spell is what makes a MOBA feel like homework; clicking the icon
+// still gives you the aim-then-confirm path when you want to line something up.
+function castNow(i) {
+  const me = G.me;
+  if (!me || me.dead) return;
+  if (!checkAbility(i)) return;
+  G.armed = -1;
+  const a = me.C.abils[i];
+  if (a.aim === "self") tryCast(me, i, me.x, me.y);
+  else tryCast(me, i, G.mouse.x, G.mouse.y);
+}
+
 function armAbility(i) {
   const me = G.me;
   if (!me || me.dead) return;
+  if (!checkAbility(i)) return;
   const a = me.C.abils[i];
-  if (me.ranks[i] === 0) { say(`${a.name} is not learned — spend a point`, "cHot"); return; }
-  if (me.cds[i] > 0 || me.mp < a.cost) { blip(140, 0.06, "square", 0.05); return; }
   if (a.aim === "self") { tryCast(me, i, me.x, me.y); return; }
   G.armed = G.armed === i ? -1 : i;
+}
+
+function checkAbility(i) {
+  const me = G.me, a = me.C.abils[i];
+  if (me.ranks[i] === 0) { say(`${a.name} is not learned — spend a point`, "cHot"); return false; }
+  if (me.cds[i] > 0 || me.mp < a.cost) { blip(140, 0.06, "square", 0.05); return false; }
+  return true;
 }
 
 const KEY_ABIL = { q: 0, w: 1, e: 2, r: 3 };
@@ -2362,9 +2429,11 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     const i = KEY_ABIL[k];
     if (e.ctrlKey || e.metaKey || e.shiftKey) { levelUp(G.me, i); return; }
-    armAbility(i);
+    castNow(i);
     return;
   }
+  if (k === "[") { setSpeed(G.speed - 0.1); say(`Pace ${G.speed.toFixed(1)}\u00d7`, "cGold"); return; }
+  if (k === "]") { setSpeed(G.speed + 0.1); say(`Pace ${G.speed.toFixed(1)}\u00d7`, "cGold"); return; }
   if (k === "a") { G.pendingAmove = true; G.armed = -1; return; }
   if (k === "s") { orderStop(G.me); G.armed = -1; return; }
   if (k === "b") {
@@ -2439,6 +2508,8 @@ function startMatch(champKey) {
   resize();
   say(`<b class="cRed">${G.bot.champ}</b> is on the other side`, "cGold");
   callout("MINIONS IN " + MATCH.firstWave + "s", "#ffc53d");
+  setSpeed(G.speed);
+  say("Too fast or too slow? <b>[</b> and <b>]</b> change the pace any time", "cGold");
   toggleShop(true);                      // you spawn in the fountain: buy your first item
   blip(440, 0.12, "triangle", 0.08);
 }
@@ -2509,7 +2580,7 @@ function frame(ts) {
   // the HUD changes height as it fills in; the canvas has to follow or circles turn to ellipses
   if (board.clientWidth !== G.view.w || board.clientHeight !== G.view.h) resize();
 
-  if (G.phase === "play" && !G.shopOpen) { stepHeldMove(dt); stepGame(dt); }
+  if (G.phase === "play" && !G.shopOpen) { stepHeldMove(dt); stepGame(dt * G.speed); }
   if (G.phase !== "menu") {
     camUpdate(dt);
     draw();
