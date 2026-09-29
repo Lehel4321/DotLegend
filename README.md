@@ -59,6 +59,8 @@ step with anything else.
 | Right click an enemy | Attack that dot until it dies. |
 | `Q` `W` `E` `R` | Cast at your cursor immediately. Click the icon instead to aim first. |
 | `[` `]` | Slow the whole game down or speed it up, any time. |
+| Hold `C` | Show your attack range. |
+| `Esc` | Pause. (Closes the shop or cancels an aim first.) The game also pauses when you switch away. |
 | `Ctrl` + `Q/W/E/R` | Spend a skill point (or click the `+` on the icon). |
 | `A` then click | Attack-move: walk there, hit whatever you meet. |
 | `S` | Stop. |
@@ -79,6 +81,32 @@ Ultimates unlock at level 6, 11 and 16. Other abilities cap at rank 5.
 | **BULWARK** | Fighter, melee | A cleave that heals, a shield, a charge that stuns the first dot it hits, and a quake that catches a whole fight. |
 
 The bot takes one of the other two.
+
+## Difficulty
+
+Chosen on the champion screen, remembered between visits, **Easy** the first time.
+
+| | damage to you / min | its farming (CS / min) | your spells that land | |
+|---|---|---|---|---|
+| **Easy** | 499 | 1.8 | 81% | Hits for 70%, thinks slower, never uses its ultimate, earns 20% less gold. |
+| **Normal** | 760 | 3.0 | 79% | The balance everything else was tuned against. |
+| **Hard** | 879 | 3.3 | 59% | Hits for 120%, and steps out of your spells — after a 0.22s reaction time, and only the 62% of them it notices. |
+
+Those are measured, not hoped for (`tools/simulate.js`, 36 matches each, ±30 on the
+damage figures). Easy is clearly easier. Hard is a modest step up in raw damage; what
+makes it Hard is that it dodges. It is deliberately beatable: an instant, perfect
+dodge would be an aimbot, and the first version of it was — it avoided 79% of spells.
+
+## Seeing what you are doing
+
+- Hover an enemy and a ring marks it and your cursor turns red: that is what a right-click
+  will attack.
+- An enemy minion **glows gold** the moment your next auto-attack would kill it, and its
+  health bar turns gold. That is last-hitting, made visible.
+- Melee dots lunge at what they hit and ranged dots recoil, so a fight reads at a glance.
+- The first few times something matters, a one-line tip says so — how to move, where the
+  gold comes from, that enemy spells show their shape first. Each appears once and is
+  remembered.
 
 ## Putting it in the dot world
 
@@ -125,18 +153,25 @@ Adding a champion means adding one entry to `CHAMPS` — the four abilities are
 primitives (`lineShot`, `burst`, `cone`, `dashTo`, `blinkTo`, `shield`, `buff`).
 Nothing else in the file needs to know it exists.
 
-## Balancing
+## Tests and balancing
 
-`tools/simulate.js` plays the bot against itself across every champion matchup
-and prints how each match ended. It needs Playwright, which the game itself does
-not.
+Neither is needed to play. Both drive the real page in a real browser.
 
 ```
-npm i playwright && node tools/simulate.js
+npm i playwright
+node tools/test.js        # 46 checks on controls and feel
+node tools/simulate.js    # how dangerous the bot is at each difficulty (~90s)
 ```
 
-Use it after changing a number: a champion that wins both of its non-mirror
-matchups, or a matrix where matches stop ending, is the signal.
+`test.js` covers the things that make it feel right or wrong: the camera holds your dot
+dead centre, a wave cannot shove you, held right-click keeps following a cursor that is
+standing still, a skillshot telegraphs and can be walked out of, the hard bot cannot
+react instantly, settings survive a reload, and so on.
+
+`simulate.js` plays a fixed-strength AI in your place and reports what a player would
+feel: damage taken, how well the bot farms, and what share of your spells land. It nudges
+each run's start because the simulation is otherwise deterministic, and reports standard
+errors so a difference is not mistaken for noise. Use it after changing a number.
 
 ## Not in yet
 

@@ -49,6 +49,7 @@
     font-size: 11px; letter-spacing: 0.12em; pointer-events: none;
   }
   #top b { font-family: var(--display); font-size: 15px; font-variant-numeric: tabular-nums; }
+  #top.off { display: none; }
   .score { display: flex; align-items: center; gap: 7px; }
   .score i { width: 9px; height: 9px; border-radius: 50%; font-style: normal; }
   .score.blue i { background: var(--blue); }
@@ -194,6 +195,16 @@
   .pick ul { list-style: none; padding: 0; margin: 12px 0 0; font-size: 10.5px; color: var(--muted); line-height: 1.7; }
   .pick ul b { color: var(--ink); font-family: var(--display); font-weight: 900; }
 
+  /* difficulty: one choice, three states, always visible before you commit */
+  .seg { display: inline-flex; border: 1px solid var(--edge); background: var(--panel); }
+  .seg button {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+    padding: 9px 20px; background: transparent; color: var(--muted); border: 0; cursor: pointer;
+  }
+  .seg button + button { border-left: 1px solid var(--edge); }
+  .seg button:hover { color: var(--ink); }
+  .seg button[aria-checked="true"] { background: var(--ink); color: #05050a; }
+
   .keys-grid {
     display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: center;
     text-align: left; font-size: 11.5px; color: var(--muted); max-width: 46ch;
@@ -209,6 +220,13 @@
     padding: 12px 26px; background: var(--ink); color: #05050a; border: 0; cursor: pointer;
   }
   button.go:hover { background: var(--gold); }
+  button.ghost {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+    padding: 9px 16px; background: transparent; color: var(--muted); border: 1px solid var(--edge); cursor: pointer;
+  }
+  button.ghost:hover { color: var(--ink); border-color: var(--muted); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 
   /* shop */
   #shopGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
@@ -266,7 +284,7 @@
     <canvas id="board"></canvas>
     <div id="scan"></div>
 
-    <div id="top">
+    <div id="top" class="off">
       <span class="score blue"><i></i>ORDER <b id="sBlue">0</b></span>
       <span id="clock">0:00</span>
       <span class="score red"><b id="sRed">0</b>CHAOS <i></i></span>
@@ -281,6 +299,8 @@
       <div class="sheet">
         <h1>DOT <em>LEGEND</em></h1>
         <p class="tag">One lane · two nexuses · every unit is a dot</p>
+        <div class="seg" id="diffSeg" role="radiogroup" aria-label="Difficulty"></div>
+        <p class="tag" id="diffBlurb" style="min-height:1.4em"></p>
         <div id="picks"></div>
         <div class="keys-grid">
           <kbd>Right click</kbd><span>Move. <b>Hold</b> it and your dot follows the cursor.</span>
@@ -288,15 +308,17 @@
           <kbd>Q W E R</kbd><span>Cast at your cursor, straight away. Click the icon instead to aim first.</span>
           <kbd>Ctrl + Q/W/E/R</kbd><span>Spend a skill point (or click the <b>+</b>).</span>
           <kbd>A</kbd><span>Attack-move: walk there, hit whatever you meet.</span>
+          <kbd>C</kbd><span>Hold to show your attack range.</span>
           <kbd>S</kbd><span>Stop.</span>
           <kbd>B</kbd><span>Recall — 5s channel, breaks on damage.</span>
           <kbd>P</kbd><span>Shop. Only opens in your fountain.</span>
           <kbd>Space</kbd><span>Snap the camera back to your dot. <b>Y</b> unlocks it.</span>
           <kbd>Scroll</kbd><span>Zoom the camera in and out.</span>
           <kbd>[ &nbsp;]</kbd><span>Slow the whole game down or speed it up, any time.</span>
+          <kbd>Esc</kbd><span>Pause. The game also pauses if you switch away.</span>
           <kbd>M</kbd><span>Mute.</span>
         </div>
-        <p class="tag" style="max-width:52ch">Last-hit minions for gold. Outer turret first — the ones behind it
+        <p class="tag" style="max-width:52ch">Last-hit minions for gold — they glow when your next hit kills. Outer turret first — the ones behind it
           are invulnerable until it falls. Kill the enemy nexus to win.</p>
       </div>
     </div>
@@ -311,12 +333,25 @@
       </div>
     </div>
 
+    <!-- ------------ pause ------------ -->
+    <div class="screen" id="pause" hidden>
+      <div class="sheet">
+        <h2>Paused</h2>
+        <p class="tag">Nothing moves while this is open</p>
+        <button class="go" id="resume">Resume</button>
+        <button class="ghost" id="quit">Back to champion select</button>
+      </div>
+    </div>
+
     <!-- ------------ result ------------ -->
     <div class="screen" id="over" hidden>
       <div class="sheet">
         <h1 id="overTitle">VICTORY</h1>
         <p class="tag" id="overLine"></p>
-        <button class="go" id="again">Play again</button>
+        <div class="row">
+          <button class="go" id="rematch">Rematch</button>
+          <button class="ghost" id="again">Change champion</button>
+        </div>
       </div>
     </div>
   </div>
@@ -460,6 +495,16 @@ const NEXUS_HP = 3600;
 
 const KILL_GOLD = 300, ASSIST_GOLD = 150, KILL_XP = 240;
 
+// How the other champion plays. Normal is the balance the matchup matrix was tuned
+// against; easy hits softer, thinks slower and never ults; hard reads your spells.
+const HARD_REACT = 0.22, HARD_NOTICE = 0.62;   // seconds to react; chance of seeing a given spell at all
+const DIFFS = {
+  easy:   { label: "Easy",   dmg: 0.70, gold: 0.80, think: 0.36, ults: false, dodge: false, blurb: "Hits softer and thinks slower. Learn the lane." },
+  normal: { label: "Normal", dmg: 1.00, gold: 1.00, think: 0.12, ults: true,  dodge: false, blurb: "An even fight." },
+  hard:   { label: "Hard",   dmg: 1.20, gold: 1.15, think: 0.07, ults: true,  dodge: true,  blurb: "Reads your spells and steps out of most of them." },
+};
+const diffOf = (u) => u && u.bot ? DIFFS[G.diff] || DIFFS.normal : null;
+
 /* ==================================================================== *
  * 3. CHAMPIONS
  * Three dots, three shapes of fight. Abilities are data: a cast()
@@ -588,6 +633,13 @@ const ITEM_BY_ID = Object.fromEntries(ITEMS.map((i) => [i.id, i]));
  * 5. STATE
  * ==================================================================== */
 
+// settings that should survive a reload; every read and write is guarded because
+// storage can be blocked (private windows, sandboxed frames) and the game must not care
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("dotlegend." + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("dotlegend." + k, JSON.stringify(v)); } catch (e) { /* fine */ } },
+};
+
 const G = {
   phase: "menu",           // menu | play | over
   t: 0, dt: 0, clock: 0,
@@ -597,11 +649,13 @@ const G = {
   wave: 0, nextWave: MATCH.firstWave,
   kills: [0, 0], nexusDown: -1,
   cam: { x: 0, y: 0, lock: true, shake: 0 },
-  zoom: 1.85,              // the camera sits close, the way a MOBA camera does
+  zoom: store.get("zoom", 1.85),   // the camera sits close, the way a MOBA camera does
   mouse: { sx: 0, sy: 0, x: 0, y: 0, down: false },
   armed: -1,               // ability index waiting for a click
   shopOpen: false, muted: false,
-  speed: 0.9,              // game pace, yours to set: 0.5x to 1.5x
+  speed: store.get("speed", 0.9),  // game pace, yours to set: 0.5x to 1.5x
+  diff: store.get("diff", "easy"),  // how hard the other champion plays
+  hover: null, showRange: false,
   view: { w: 100, h: 100, dpr: 1 },
   paused: false,
 };
@@ -843,6 +897,8 @@ function damage(src, tgt, raw, type, opt) {
   if (tgt.kind === "nexus" && !nexusOpen(tgt.team)) return 0;
   if (tgt.kind === "turret" && !turretOpen(tgt)) return 0;
 
+  const D = diffOf(src);
+  if (D) raw *= D.dmg;
   let dmg = type === "true" ? raw : mitigate(raw, type === "magic" ? tgt.stat.mr : tgt.stat.armor);
   // structures take reduced champion damage so a lone dot cannot solo a turret in ten seconds
   if (isStruct(tgt) && src && isChamp(src)) dmg *= 0.82;
@@ -880,6 +936,7 @@ function die(u, killer) {
   if (u.kind === "minion") {
     if (killer && isChamp(killer)) {
       killer.gold += u.M.gold; killer.cs++;
+      if (killer === G.me) blip(1240, 0.07, "triangle", 0.07);       // the last hit, audible
       float(u, "+" + u.M.gold, "#ffc53d");
     }
     grantXp(u.x, u.y, u.M.xp);
@@ -969,6 +1026,8 @@ function autoAttack(u, tgt) {
   u.atkCd = 1 / Math.max(0.15, attackSpeed(u));
   u.facing = Math.atan2(tgt.y - u.y, tgt.x - u.x);
   const ranged = u.kind === "champ" ? u.C.ranged : (u.stat.range > 90);
+  // melee dots lunge at what they hit, ranged dots recoil from it: you can read a fight by watching them
+  u.lunge = { t: 0.16, a: u.facing, amp: ranged ? -2.5 : 5.5 };
   if (ranged) {
     G.projs.push({
       x: u.x, y: u.y, tx: tgt.x, ty: tgt.y, homing: tgt.id, speed: u.kind === "turret" ? 560 : 360,
@@ -989,7 +1048,7 @@ function lineShot(u, tx, ty, range, width, dmg, type, opt) {
     x: u.x, y: u.y, vx: Math.cos(a) * (opt.speed || 800), vy: Math.sin(a) * (opt.speed || 800),
     team: u.team, owner: u.id, dmg, type, r: width / 2, color: opt.color, big: !!opt.big,
     pierce: !!opt.pierce, slow: opt.slow, stun: opt.stun, hit: new Set(),
-    life: range / (opt.speed || 800), trail: true,
+    life: range / (opt.speed || 800), trail: true, born: G.clock,
   });
   blip(520, 0.06, "sine", 0.05);
 }
@@ -1204,6 +1263,7 @@ function stepUnit(u, dt) {
   if (u.shieldT > 0) { u.shieldT -= dt; if (u.shieldT <= 0) u.shieldHp = 0; }
   if (u.hitFlash > 0) u.hitFlash -= dt;
   if (u.atkCd > 0) u.atkCd -= dt;
+  if (u.lunge) { u.lunge.t -= dt; if (u.lunge.t <= 0) u.lunge = null; }
 
   if (isChamp(u)) {
     for (let i = 0; i < 4; i++) if (u.cds[i] > 0) u.cds[i] -= dt;
@@ -1217,7 +1277,7 @@ function stepUnit(u, dt) {
       }
       return;
     }
-    u.gold += MATCH.goldPerSec * dt;
+    u.gold += MATCH.goldPerSec * dt * (diffOf(u) ? diffOf(u).gold : 1);
     u.hp = Math.min(u.maxHp, u.hp + u.stat.hpReg * dt);
     u.mp = Math.min(u.maxMp, u.mp + u.stat.mpReg * dt);
 
@@ -1501,7 +1561,8 @@ function botThink(u, dt) {
 
   if (u.recall > 0) return;
   if (u.ai.t > 0) return;
-  u.ai.t = 0.12;
+  if (dodgeIncoming(u)) { u.ai.t = 0.4; return; }
+  u.ai.t = (diffOf(u) || DIFFS.normal).think;
 
   const me = u === G.me ? G.bot : G.me;      // "the other dot", whichever side we are
   const hpPct = u.hp / u.maxHp;
@@ -1592,6 +1653,32 @@ function botThink(u, dt) {
   orderMove(u, hold, laneY, true);
 }
 
+// Step sideways out of an enemy line shot that is about to reach us. It only sees
+// what a person sees — a projectile already in flight — and it takes a real step
+// to leave the line, so a shot aimed a little ahead of the bot still lands.
+function dodgeIncoming(u) {
+  const D = diffOf(u);
+  if (!D || !D.dodge || u.casting || u.dash || u.stun > 0) return false;
+  for (const p of G.projs) {
+    if (p.homing || p.team === u.team) continue;
+    if (G.clock - p.born < HARD_REACT) continue;                  // it has not had time to react yet
+    if (p.noticed === undefined) p.noticed = Math.random() < HARD_NOTICE;
+    if (!p.noticed) continue;                                     // this one slipped past
+    const sp = Math.hypot(p.vx, p.vy) || 1;
+    const rx = u.x - p.x, ry = u.y - p.y;
+    const ahead = (rx * p.vx + ry * p.vy) / sp;                  // how far down its path we are
+    if (ahead < 0 || ahead > sp * Math.min(p.life, 0.9)) continue;
+    const nx = p.vy / sp, ny = -p.vx / sp;                       // the line's normal
+    const off = rx * nx + ry * ny;                               // which side of the line we stand on
+    if (Math.abs(off) > u.r + p.r + 26) continue;
+    for (const side of [off >= 0 ? 1 : -1, off >= 0 ? -1 : 1]) {
+      const tx = u.x + nx * side * 130, ty = u.y + ny * side * 130;
+      if (walkableAt(tx, ty)) { orderMove(u, tx, ty); return true; }
+    }
+  }
+  return false;
+}
+
 function castRotation(u, foe, aggressive, d) {
   const A = u.C.abils;
   const lead = { x: foe.x, y: foe.y };
@@ -1605,6 +1692,7 @@ function castRotation(u, foe, aggressive, d) {
   for (let i = 0; i < 4; i++) {
     if (!canCast(u, i)) continue;
     const a = A[i];
+    if (a.ult && diffOf(u) && !diffOf(u).ults) continue;
     if (a.aim === "self") {
       if (a.ult) { if (d < a.range * 0.8 && (aggressive || hpPct < 0.4)) tryCast(u, i, foe.x, foe.y); }
       else if (d < 260 && (aggressive || u.hp / u.maxHp < 0.6)) tryCast(u, i, u.x, u.y);
@@ -1787,6 +1875,7 @@ function draw() {
   // --- aiming, and every wind-up on the board
   drawAim();
   drawCasts();
+  drawRangeRing();
 
   // --- units, structures under dots
   const order = [...G.units].sort((a, b) => rank(a) - rank(b));
@@ -1794,6 +1883,15 @@ function draw() {
     if (u.dead) continue;
     if (!visibleTo(u, BLUE)) continue;
     drawUnit(u);
+  }
+
+  // --- the dot a right-click would attack
+  if (G.hover && !G.hover.dead) {
+    const h = G.hover;
+    ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]);
+    ctx.lineDashOffset = -G.t * 14;
+    ctx.beginPath(); ctx.arc(h.x, h.y, h.r + 7, 0, 7); ctx.stroke();
+    ctx.setLineDash([]);
   }
 
   // --- projectiles
@@ -1842,6 +1940,16 @@ function fogCanvas(w, h) {
 
 function drawUnit(u) {
   if (!inView(u.x, u.y, 60)) return;
+  const L = u.lunge;
+  if (!L || isStruct(u)) { drawUnitBody(u); return; }
+  const k = Math.sin(Math.PI * (1 - L.t / 0.16));            // out and back, 0 -> 1 -> 0
+  ctx.save();
+  ctx.translate(Math.cos(L.a) * L.amp * k, Math.sin(L.a) * L.amp * k);
+  drawUnitBody(u);
+  ctx.restore();
+}
+
+function drawUnitBody(u) {
   const col = unitColor(u);
   const flash = u.hitFlash > 0;
 
@@ -1897,6 +2005,12 @@ function drawUnit(u) {
   }
 
   if (u.kind === "minion") {
+    if (killable(u)) {
+      const pulse = 0.5 + 0.5 * Math.sin(G.t * 12);
+      ctx.strokeStyle = "#ffc53d"; ctx.lineWidth = 2.5; ctx.globalAlpha = 0.55 + pulse * 0.45;
+      ctx.beginPath(); ctx.arc(u.x, u.y, u.r + 4 + pulse * 2.5, 0, 7); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
     ctx.fillStyle = flash ? "#fff" : col;
     ctx.beginPath(); ctx.arc(u.x, u.y, u.r, 0, 7); ctx.fill();
     if (u.type !== "melee") {
@@ -1907,7 +2021,7 @@ function drawUnit(u) {
       ctx.strokeStyle = "#ffc53d"; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(u.x, u.y, u.r + 3, 0, 7); ctx.stroke();
     }
-    hpBar(u, 22, -u.r - 7, true);
+    hpBar(u, 22, -u.r - 7, true, killable(u));
     return;
   }
 
@@ -1954,13 +2068,13 @@ function drawUnit(u) {
   ctx.textAlign = "left";
 }
 
-function hpBar(u, w, dy, thin) {
+function hpBar(u, w, dy, thin, gold) {
   const h = thin ? 3 : 4;
   const x = u.x - w / 2, y = u.y + dy;
   ctx.fillStyle = "#05050a"; ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
   ctx.fillStyle = "#1a1a26"; ctx.fillRect(x, y, w, h);
   const pct = clamp(u.hp / u.maxHp, 0, 1);
-  ctx.fillStyle = u.team === BLUE ? "#3dff88" : "#ff2e4d";
+  ctx.fillStyle = gold ? "#ffc53d" : u.team === BLUE ? "#3dff88" : "#ff2e4d";
   ctx.fillRect(x, y, w * pct, h);
   if (u.shieldHp > 0) {
     const sw = Math.min(w * (1 - pct), w * (u.shieldHp / u.maxHp));
@@ -1973,6 +2087,20 @@ function hpBar(u, w, dy, thin) {
     for (let v = seg; v < u.maxHp; v += seg) ctx.fillRect(x + w * (v / u.maxHp), y, 1, h);
   }
 }
+
+// your auto-attack reach, on demand — the honest answer to "can I hit that from here"
+function drawRangeRing() {
+  const me = G.me;
+  if (!me || me.dead || !G.showRange) return;
+  ctx.save();
+  ctx.strokeStyle = "rgba(236,234,244,0.55)"; ctx.lineWidth = 1.5; ctx.setLineDash([3, 6]);
+  ctx.beginPath(); ctx.arc(me.x, me.y, attackRange(me), 0, 7); ctx.stroke();
+  ctx.restore();
+}
+
+// the damage your next auto-attack does to this unit, after its armour
+const myHit = (t) => mitigate(G.me.stat.ad, t.stat.armor);
+const killable = (t) => G.me && !G.me.dead && t.kind === "minion" && t.team !== G.me.team && t.hp <= myHit(t);
 
 function drawAim() {
   const me = G.me;
@@ -2151,12 +2279,26 @@ const el = {
   shop: $("shop"), shopGrid: $("shopGrid"), shopGold: $("shopGold"), shopSlots: $("shopSlots"),
   over: $("over"), overTitle: $("overTitle"), overLine: $("overLine"), again: $("again"),
   shopBtn: $("shopBtn"), shopBtnGold: $("shopBtnGold"), speedV: $("speedV"),
+  pause: $("pause"),
 };
+
+function setPaused(on) {
+  if (G.phase !== "play") return;
+  G.paused = on;
+  el.pause.hidden = !on;
+  if (on) { G.rmb = false; G.armed = -1; }
+}
+$("resume").onclick = () => setPaused(false);
+$("quit").onclick = () => { setPaused(false); toMenu(); };
+// looking away is a pause: a fight should never be lost to a notification
+window.addEventListener("blur", () => { if (G.phase === "play" && !G.shopOpen) setPaused(true); });
+document.addEventListener("visibilitychange", () => { if (document.hidden && G.phase === "play") setPaused(true); });
 el.shopBtn.onclick = () => toggleShop();
 
 function setSpeed(v) {
   G.speed = clamp(Math.round(v * 10) / 10, 0.5, 1.5);
   el.speedV.textContent = G.speed.toFixed(1) + "\u00d7";
+  store.set("speed", G.speed);
 }
 for (const b of $("speed").querySelectorAll("button"))
   b.onclick = () => setSpeed(G.speed + 0.1 * Number(b.dataset.d));
@@ -2320,15 +2462,22 @@ function toWorld(e) {
 }
 
 board.addEventListener("contextmenu", (e) => e.preventDefault());
-board.addEventListener("mousemove", (e) => {
-  const p = toWorld(e);
-  G.mouse.x = p.x; G.mouse.y = p.y;
-});
+function setMouseScreen(e) {
+  const r = board.getBoundingClientRect();
+  G.mouse.sx = e.clientX - r.left; G.mouse.sy = e.clientY - r.top;
+  syncMouse();
+}
+// the world point under the cursor, recomputed against the camera as it is right now
+function syncMouse() {
+  G.mouse.x = G.cam.x + G.mouse.sx / G.zoom;
+  G.mouse.y = G.cam.y + G.mouse.sy / G.zoom;
+}
+board.addEventListener("mousemove", setMouseScreen);
 
 board.addEventListener("mousedown", (e) => {
-  if (G.phase !== "play" || !G.me) return;
-  const p = toWorld(e);
-  G.mouse.x = p.x; G.mouse.y = p.y;
+  if (G.phase !== "play" || !G.me || G.paused) return;
+  setMouseScreen(e);
+  const p = { x: G.mouse.x, y: G.mouse.y };
 
   if (e.button === 2) {                       // right click
     e.preventDefault();
@@ -2371,6 +2520,16 @@ function stepHeldMove(dt) {
   if (len(G.mouse.x - me.x, G.mouse.y - me.y) < 12) return;
   orderMove(me, G.mouse.x, G.mouse.y, false);
 }
+
+// which enemy the next right-click would attack; drawn as a ring and shown in the cursor
+function updateHover() {
+  if (G.phase !== "play" || !G.me || G.me.dead || G.paused || G.armed >= 0) {
+    G.hover = null; board.style.cursor = G.armed >= 0 ? "crosshair" : ""; return;
+  }
+  G.hover = unitUnder(G.mouse.x, G.mouse.y, 1 - G.me.team);
+  board.style.cursor = G.hover ? CURSOR_ATTACK : "";
+}
+const CURSOR_ATTACK = 'url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2728%27 height=%2728%27%3E%3Ccircle cx=%2714%27 cy=%2714%27 r=%278%27 fill=%27none%27 stroke=%27%23ff2e4d%27 stroke-width=%272.5%27/%3E%3Ccircle cx=%2714%27 cy=%2714%27 r=%272.5%27 fill=%27%23ff2e4d%27/%3E%3C/svg%3E") 14 14, pointer';
 
 function unitUnder(x, y, team) {
   let best = null, bd = 26;
@@ -2421,7 +2580,14 @@ window.addEventListener("keydown", (e) => {
   if (k === "m") { G.muted = !G.muted; say(G.muted ? "Muted" : "Unmuted", "cGold"); return; }
   if (G.phase !== "play" || !G.me) return;
 
-  if (k === "escape") { G.armed = -1; if (G.shopOpen) toggleShop(false); return; }
+  if (k === "escape") {
+    if (G.paused) { setPaused(false); return; }
+    if (G.shopOpen) { toggleShop(false); return; }
+    if (G.armed >= 0 || G.pendingAmove) { G.armed = -1; G.pendingAmove = false; return; }
+    setPaused(true);
+    return;
+  }
+  if (G.paused) return;
   if (k === "p") { e.preventDefault(); toggleShop(); return; }
   if (G.shopOpen) return;
 
@@ -2434,6 +2600,7 @@ window.addEventListener("keydown", (e) => {
   }
   if (k === "[") { setSpeed(G.speed - 0.1); say(`Pace ${G.speed.toFixed(1)}\u00d7`, "cGold"); return; }
   if (k === "]") { setSpeed(G.speed + 0.1); say(`Pace ${G.speed.toFixed(1)}\u00d7`, "cGold"); return; }
+  if (k === "c") { G.showRange = true; return; }
   if (k === "a") { G.pendingAmove = true; G.armed = -1; return; }
   if (k === "s") { orderStop(G.me); G.armed = -1; return; }
   if (k === "b") {
@@ -2446,6 +2613,8 @@ window.addEventListener("keydown", (e) => {
   if (k === " ") { e.preventDefault(); G.cam.lock = true; return; }
   if (k === "y") { G.cam.lock = !G.cam.lock; say("Camera " + (G.cam.lock ? "locked" : "free"), "cGold"); }
 });
+
+window.addEventListener("keyup", (e) => { if (e.key.toLowerCase() === "c") G.showRange = false; });
 
 // edge scroll with the camera unlocked, and minimap clicks
 board.addEventListener("mouseleave", () => { G.edge = null; });
@@ -2461,11 +2630,31 @@ mini.addEventListener("mousedown", (e) => {
 board.addEventListener("wheel", (e) => {
   e.preventDefault();
   G.zoom = clamp(G.zoom * (e.deltaY > 0 ? 0.9 : 1.1), 1.25, 2.8);
+  store.set("zoom", +G.zoom.toFixed(3));
 }, { passive: false });
 
 /* ==================================================================== *
  * 19. MATCH
  * ==================================================================== */
+
+function buildDiff() {
+  const seg = $("diffSeg");
+  seg.innerHTML = "";
+  for (const [key, D] of Object.entries(DIFFS)) {
+    const b = document.createElement("button");
+    b.textContent = D.label;
+    b.setAttribute("role", "radio");
+    b.dataset.k = key;
+    b.onclick = () => { G.diff = key; store.set("diff", key); paintDiff(); };
+    seg.appendChild(b);
+  }
+  paintDiff();
+}
+function paintDiff() {
+  if (!DIFFS[G.diff]) G.diff = "easy";
+  for (const b of $("diffSeg").children) b.setAttribute("aria-checked", String(b.dataset.k === G.diff));
+  $("diffBlurb").textContent = DIFFS[G.diff].blurb;
+}
 
 function buildPicks() {
   el.picks.innerHTML = "";
@@ -2504,6 +2693,7 @@ function startMatch(champKey) {
   buildShop();
   el.menu.hidden = true;
   el.bar.classList.remove("hidden");
+  $("top").classList.remove("off");
   G.phase = "play";
   resize();
   say(`<b class="cRed">${G.bot.champ}</b> is on the other side`, "cGold");
@@ -2530,19 +2720,48 @@ function finish(winner) {
   if (window.DotLegend && window.DotLegend.onEnd) window.DotLegend.onEnd(won ? "win" : "loss", window.DotLegend.state());
 }
 
-el.again.onclick = () => {
-  el.over.hidden = true;
+function toMenu() {
+  el.over.hidden = true; el.shop.hidden = true; G.shopOpen = false;
   el.bar.classList.add("hidden");
+  $("top").classList.add("off");
+  el.veil.classList.remove("on");
   el.menu.hidden = false;
   G.phase = "menu";
-};
+}
+el.again.onclick = toMenu;
+$("rematch").onclick = () => startMatch(G.me.champ);
 
 /* ==================================================================== *
  * 20. LOOP
  * ==================================================================== */
 
+// One-line coaching, each shown the first time its moment arrives and never again
+// (remembered across sessions). It teaches by pointing, then gets out of the way.
+const TIPS = [
+  { id: "move",  when: () => G.clock > 2.5,
+    text: "<b>Right-click</b> to move. <b>Hold</b> it and your dot follows the cursor." },
+  { id: "skill", when: () => G.clock > 7 && G.me.points > 0 && G.me.ranks.every((r) => r === 0),
+    text: "You have a skill point: press <b>Ctrl+Q</b> to learn your first spell." },
+  { id: "hit",   when: () => G.units.some((u) => u.kind === "minion" && u.team === RED && len(u.x - G.me.x, u.y - G.me.y) < 420),
+    text: "<b>Right-click</b> a minion to attack it. When one <b>glows gold</b>, your next hit kills it — that is what pays." },
+  { id: "foe",   when: () => G.bot && !G.bot.dead && visibleTo(G.bot, BLUE) && len(G.bot.x - G.me.x, G.bot.y - G.me.y) < 560,
+    text: "Their spells draw a shape on the ground before they land. <b>Step off it.</b>" },
+];
+function coach() {
+  if (!G.me || G.me.dead) return;
+  const seen = store.get("tips", {});
+  for (const t of TIPS) {
+    if (seen[t.id] || !t.when()) continue;
+    seen[t.id] = 1; store.set("tips", seen);
+    say(t.text, "cGold");
+    return;                                   // one at a time
+  }
+}
+
 function stepGame(dt) {
   G.clock += dt;
+  G.tipT = (G.tipT || 0) - dt;
+  if (G.tipT <= 0 && G.auto !== true) { G.tipT = 1; coach(); }
 
   if (G.clock >= G.nextWave) { spawnWave(); G.nextWave += MATCH.waveEvery; }
 
@@ -2580,9 +2799,12 @@ function frame(ts) {
   // the HUD changes height as it fills in; the canvas has to follow or circles turn to ellipses
   if (board.clientWidth !== G.view.w || board.clientHeight !== G.view.h) resize();
 
-  if (G.phase === "play" && !G.shopOpen) { stepHeldMove(dt); stepGame(dt * G.speed); }
+  syncMouse();
+  if (G.phase === "play" && !G.shopOpen && !G.paused) { stepHeldMove(dt); stepGame(dt * G.speed); }
   if (G.phase !== "menu") {
     camUpdate(dt);
+    syncMouse();
+    updateHover();
     draw();
     drawMini();
     updateHud();
@@ -2596,7 +2818,9 @@ function frame(ts) {
   requestAnimationFrame(frame);
 }
 
+buildDiff();
 buildPicks();
+setSpeed(G.speed);
 resize();
 requestAnimationFrame(frame);
 
