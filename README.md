@@ -3,7 +3,8 @@
 A browser MOBA in the dot style. One lane, two nexuses, and every unit on the
 board — champion, minion, turret, nexus — is a dot on a seamed grid.
 
-No 3D, no build step, no dependencies. Open `index.html` and play.
+No 3D, no build step, no dependencies. Open `index.html` and play — against the
+bot, or against a friend.
 
 ```
 git clone <this repo> && cd DotLegend
@@ -82,6 +83,56 @@ Ultimates unlock at level 6, 11 and 16. Other abilities cap at rank 5.
 
 The bot takes one of the other two.
 
+## Playing a friend
+
+Choose **With a friend** on the champion screen. Both of you open the same page.
+
+1. **Host** presses *Host a game* and sends the code it shows to the friend, in any chat.
+2. **Friend** pastes it, presses *Make my reply*, and sends the reply back.
+3. **Host** pastes the reply and presses *Connect*. The match starts by itself.
+
+There is no server. Each code carries what two browsers need to find each other
+(WebRTC); after that they talk directly. That is why it is two short codes (about 570
+characters each) rather than a room number: a room number needs somewhere to live. A code
+contains your network addresses, so send it only to the person you are playing.
+
+The host is ORDER (left), the friend is CHAOS (right). Each picks a champion, and both can
+pick the same one. Nobody can pause, and the pace is fixed at the host's setting, so
+nobody can freeze or speed up the other. The match keeps running while you shop.
+
+**How it works.** The host's page runs the one true simulation, with the friend driving
+the other champion. The friend's page runs none: it sends what the player wants — the same
+*intents* your own clicks become, validated by the same code — and draws what the host
+sends back, twenty times a second. Two things follow:
+
+- **The friend cannot cheat fog of war.** The host only tells them about what their side
+  can see, so an enemy in the fog is not in the data at all. The host, which runs
+  everything, *could* cheat. Play with people you trust.
+- **The friend's own dot moves the instant they click**, not a round trip later. Their page
+  predicts a walk to a point or a target and the host corrects it if it was wrong. With 140ms
+  of simulated round trip the dot was already moving 90ms after the click, before the host
+  had heard, and the two ended on the same spot with no jitter. (Attack-move and spells are
+  not predicted; they wait for the host.)
+
+**The host's tab runs the match, so keep it open and in front.** If the browser puts it in
+the background it stops, and the friend sees a warning that the host has gone quiet.
+
+### What has and has not been tested
+
+Tested by `tools/test-net.js` (56 checks): two real browsers, real WebRTC data
+channels, the real lobby driven the way two people would use it, and the same inside a
+sandboxed frame with storage and clipboard blocked. It covers movement with 140ms of
+simulated lag, spells, purchases, fog of war across the wire, kills and messages reaching
+the right person, the end screen and a rematch, someone leaving, and a friend sending
+garbage or hostile input.
+
+**Not tested: two machines on different networks.** Both browsers in the test are on one
+machine. Direct connections can fail on strict school or work networks, some VPNs, and
+phone networks behind carrier-grade NAT, and there is no relay server to fall back on.
+If two people cannot connect, the game says so and suggests trying another network.
+It has also not been run inside claude.ai's own frame, only inside the strictest standard
+sandbox.
+
 ## Difficulty
 
 Chosen on the champion screen, remembered between visits, **Easy** the first time.
@@ -90,7 +141,7 @@ Chosen on the champion screen, remembered between visits, **Easy** the first tim
 |---|---|---|---|---|
 | **Easy** | 499 | 1.8 | 81% | Hits for 70%, thinks slower, never uses its ultimate, earns 20% less gold. |
 | **Normal** | 760 | 3.0 | 79% | The balance everything else was tuned against. |
-| **Hard** | 879 | 3.3 | 59% | Hits for 120%, and steps out of your spells — after a 0.22s reaction time, and only the 62% of them it notices. |
+| **Hard** | ~900 | 3.3 | 59% | Hits for 120%, and steps out of your spells — after a 0.22s reaction time, and only the 62% of them it notices. |
 
 Those are measured, not hoped for (`tools/simulate.js`, 36 matches each, ±30 on the
 damage figures). Easy is clearly easier. Hard is a modest step up in raw damage; what
@@ -114,11 +165,11 @@ The game is one file and it never touches the page outside its own `#stage`,
 so an `<iframe>` is enough. It also exposes a small API on `window`:
 
 ```js
-DotLegend.version           // "0.1.0"
+DotLegend.version           // "0.2.0"
 DotLegend.champions         // ["VECTOR", "PULSE", "BULWARK"]
 DotLegend.start("PULSE")    // skip the select screen
 DotLegend.autoplay(true)    // hand your dot to the lane AI — an attract screen
-DotLegend.state()           // { phase, clock, kills, me: { champ, level, k, d, a, cs, gold } }
+DotLegend.state()           // { phase, mode: "solo"|"host"|"guest", clock, kills, me: { … } }
 DotLegend.onEnd = (result, state) => { ... }   // "win" | "loss"
 ```
 
@@ -147,6 +198,7 @@ same DOM-not-canvas HUD, and the same square-wave blips.
 | 14 | the renderer |
 | 15–18 | sound, HUD, shop, input |
 | 19–21 | match setup, the loop, the embed API |
+| 22 | playing a friend: the invite code, the connection, host snapshots, the friend's client and prediction, the lobby |
 
 Adding a champion means adding one entry to `CHAMPS` — the four abilities are
 `{ key, name, cd, cost, range, aim, cast }`, and `cast` builds on the shared
@@ -160,6 +212,7 @@ Neither is needed to play. Both drive the real page in a real browser.
 ```
 npm i playwright
 node tools/test.js        # 46 checks on controls and feel
+node tools/test-net.js    # two browsers playing each other (~60s)
 node tools/simulate.js    # how dangerous the bot is at each difficulty (~90s)
 ```
 
@@ -176,6 +229,7 @@ errors so a difference is not mistaken for noise. Use it after changing a number
 ## Not in yet
 
 Three lanes and a jungle, a second champion per side, wards, inhibitors,
-neutral objectives, and online play. The map is generated in `buildMap()` from a
+neutral objectives, a relay server for the networks that block direct connections, and
+spectating. The map is generated in `buildMap()` from a
 handful of spans, so a three-lane version is a change to that function and to
 the minions' waypoints rather than a rewrite.

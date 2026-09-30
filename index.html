@@ -205,6 +205,36 @@
   .seg button:hover { color: var(--ink); }
   .seg button[aria-checked="true"] { background: var(--ink); color: #05050a; }
 
+  [hidden] { display: none !important; }
+  .stack { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+  .fld { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .flow { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .step { margin: 6px 0 0; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink); }
+  input, textarea {
+    font-family: var(--mono); background: var(--panel); color: var(--ink);
+    border: 1px solid var(--edge); padding: 10px 12px; border-radius: 0;
+  }
+  input { width: 220px; text-align: center; font-size: 13px; }
+  textarea { width: min(520px, 88vw); font-size: 10.5px; line-height: 1.45; resize: none; word-break: break-all; }
+  input:focus, textarea:focus { border-color: var(--gold); outline: none; }
+  ::placeholder { color: var(--muted); opacity: 0.7; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  .tag.err { color: var(--hot); }
+  .tag.hint { font-size: 10px; opacity: 0.8; max-width: 46ch; }
+  .pick.sel { border-color: var(--gold); background: #14120a; }
+  em.you { font-style: normal; font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold);
+    border: 1px solid var(--gold); padding: 1px 5px; margin: 0 4px; }
+  #lag {
+    position: absolute; left: 50%; top: 44px; transform: translateX(-50%); z-index: 6; max-width: min(460px, 90vw);
+    background: rgba(11,11,18,0.94); border: 1px solid var(--hot); color: var(--ink);
+    font-size: 11px; letter-spacing: 0.04em; padding: 8px 12px; text-align: center; line-height: 1.4; pointer-events: none;
+  }
+  /* with a friend the clock does not stop for shopping, so the shop must not hide the fight */
+  body.mp #shop { background: rgba(5, 5, 10, 0.62); }
+  #ping.good { color: var(--safe); } #ping.warn { color: var(--gold); } #ping.bad { color: var(--hot); }
+  body:not(.mp) #pingWrap { display: none; }
+  body.mp #speedCell { display: none; }
+
   .keys-grid {
     display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: center;
     text-align: left; font-size: 11.5px; color: var(--muted); max-width: 46ch;
@@ -285,11 +315,13 @@
     <div id="scan"></div>
 
     <div id="top" class="off">
-      <span class="score blue"><i></i>ORDER <b id="sBlue">0</b></span>
+      <span class="score blue"><i></i>ORDER <b id="sBlue">0</b><em class="you" id="youBlue" hidden>you</em></span>
       <span id="clock">0:00</span>
-      <span class="score red"><b id="sRed">0</b>CHAOS <i></i></span>
+      <span id="pingWrap">· <b id="ping">…</b></span>
+      <span class="score red"><em class="you" id="youRed" hidden>you</em><b id="sRed">0</b>CHAOS <i></i></span>
     </div>
 
+    <div id="lag" hidden>No news from the host. If they switched tabs, the match waits for them.</div>
     <div id="feed"></div>
     <div id="callout"></div>
     <div id="veil"><span class="tag">Respawning in</span><b id="veilN">6</b></div>
@@ -299,9 +331,49 @@
       <div class="sheet">
         <h1>DOT <em>LEGEND</em></h1>
         <p class="tag">One lane · two nexuses · every unit is a dot</p>
-        <div class="seg" id="diffSeg" role="radiogroup" aria-label="Difficulty"></div>
-        <p class="tag" id="diffBlurb" style="min-height:1.4em"></p>
+        <div class="seg" id="modeSeg" role="radiogroup" aria-label="Mode">
+          <button role="radio" data-m="solo" aria-checked="true">Solo</button>
+          <button role="radio" data-m="friend" aria-checked="false">With a friend</button>
+        </div>
+        <div class="stack" id="soloBits">
+          <div class="seg" id="diffSeg" role="radiogroup" aria-label="Difficulty"></div>
+          <p class="tag" id="diffBlurb" style="min-height:1.4em"></p>
+        </div>
         <div id="picks"></div>
+
+        <div class="stack" id="friendPanel" hidden>
+          <label class="fld"><span class="tag">Your name</span>
+            <input id="pname" maxlength="14" placeholder="Player" autocomplete="off" spellcheck="false"></label>
+          <div class="row">
+            <button class="go" id="btnHost">Host a game</button>
+            <button class="go" id="btnJoin">Join a game</button>
+          </div>
+
+          <div class="flow" id="hostFlow" hidden>
+            <p class="step">1 · Send this code to your friend</p>
+            <textarea id="hostCode" readonly rows="4" aria-label="Your code"></textarea>
+            <button class="ghost" id="copyHost">Copy code</button>
+            <div class="flow" id="hostStep2" hidden>
+              <p class="step">2 · Paste the reply they send back</p>
+              <textarea id="hostReply" rows="4" placeholder="Paste their reply here" aria-label="Your friend's reply"></textarea>
+              <button class="go" id="btnConnect">Connect</button>
+            </div>
+          </div>
+
+          <div class="flow" id="joinFlow" hidden>
+            <p class="step">1 · Paste the code your friend sent</p>
+            <textarea id="joinCode" rows="4" placeholder="Paste their code here" aria-label="Your friend's code"></textarea>
+            <button class="go" id="btnReply">Make my reply</button>
+            <div class="flow" id="joinStep2" hidden>
+              <p class="step">2 · Send this reply back to them</p>
+              <textarea id="joinReply" readonly rows="4" aria-label="Your reply"></textarea>
+              <button class="ghost" id="copyJoin">Copy reply</button>
+            </div>
+          </div>
+
+          <p class="tag" id="netStatus" role="status"></p>
+          <p class="tag hint">The host's tab runs the match. Keep it open and in front.</p>
+        </div>
         <div class="keys-grid">
           <kbd>Right click</kbd><span>Move. <b>Hold</b> it and your dot follows the cursor.</span>
           <kbd>Right click enemy</kbd><span>Attack that dot until it dies.</span>
@@ -348,6 +420,7 @@
       <div class="sheet">
         <h1 id="overTitle">VICTORY</h1>
         <p class="tag" id="overLine"></p>
+        <p class="tag" id="overWait" hidden>Waiting for the host to start a rematch…</p>
         <div class="row">
           <button class="go" id="rematch">Rematch</button>
           <button class="ghost" id="again">Change champion</button>
@@ -377,7 +450,7 @@
       <div class="lbl">Gold</div>
       <button id="shopBtn"><b id="shopBtnGold">500</b><span>SHOP · P</span></button>
     </div>
-    <div class="cell">
+    <div class="cell" id="speedCell">
       <div class="lbl">Pace</div>
       <div id="speed">
         <button data-d="-1" title="Slower ( [ )">&minus;</button>
@@ -640,6 +713,12 @@ const store = {
   set(k, v) { try { localStorage.setItem("dotlegend." + k, JSON.stringify(v)); } catch (e) { /* fine */ } },
 };
 
+// Which side of the wire this page is on. 'solo' runs everything against the bot;
+// 'host' runs the one true simulation with a friend driving the other champion;
+// 'guest' runs no simulation at all and only draws what the host sends it.
+const NET = { role: "solo" };
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
 const G = {
   phase: "menu",           // menu | play | over
   t: 0, dt: 0, clock: 0,
@@ -661,6 +740,8 @@ const G = {
 };
 
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+// the side whose eyes we are looking through: fog, colours and "mine" all hang off this
+const viewTeam = () => (G.me ? G.me.team : BLUE);
 // the visible world, in world units — everything camera-shaped goes through these
 const viewW = () => G.view.w / G.zoom;
 const viewH = () => G.view.h / G.zoom;
@@ -691,10 +772,10 @@ const alive = (u) => u && !u.dead;
 const isChamp = (u) => !!u && u.kind === "champ";
 const isStruct = (u) => !!u && (u.kind === "turret" || u.kind === "nexus");
 
-function makeChamp(team, key, isBot) {
+function makeChamp(team, key, isBot, remote) {
   const C = CHAMPS[key];
   const u = addUnit({
-    kind: "champ", team, champ: key, C, bot: !!isBot,
+    kind: "champ", team, champ: key, C, bot: !!isBot, remote: !!remote, pname: "",
     x: FOUNTAIN[team].x, y: FOUNTAIN[team].y, r: C.r,
     level: 1, xp: 0, gold: MATCH.startGold, points: 1, inFountain: true,
     ranks: [0, 0, 0, 0], cds: [0, 0, 0, 0],
@@ -911,13 +992,13 @@ function damage(src, tgt, raw, type, opt) {
   }
   tgt.hp -= dmg;
   tgt.hitFlash = 0.14;
-  if (dmg > 0 && (isChamp(tgt) || isChamp(src))) float(tgt, Math.round(dmg), src && isChamp(src) && src.team === BLUE ? "#ffffff" : "#ff8a9c");
+  if (dmg > 0 && (isChamp(tgt) || isChamp(src))) float(tgt, Math.round(dmg), "dmg", src ? src.team : -1);
 
   if (src && isChamp(src)) {
     if (src.stat.lifesteal && !isStruct(tgt) && (!opt || !opt.noSteal)) heal(src, dmg * src.stat.lifesteal);
     if (isChamp(tgt)) tgt.dmgLog.push({ id: src.id, t: G.t });
     // recalls break the moment anything touches you
-    if (tgt.recall > 0) { tgt.recall = 0; if (tgt === G.me) say("Recall interrupted", "cHot"); }
+    if (tgt.recall > 0) { tgt.recall = 0; tell(tgt, "Recall interrupted", "cHot"); }
   }
   if (isChamp(tgt) && src) tgt.lastHitBy = src.id;
   // turrets remember who shot at a champion under them
@@ -931,12 +1012,12 @@ function die(u, killer) {
   if (u.dead) return;
   u.dead = true; u.hp = 0; u.casting = null;
   G.fx.push({ kind: "pop", x: u.x, y: u.y, r: u.r, t: 0.35, life: 0.35, color: unitColor(u) });
-  blip(u.kind === "champ" ? 120 : 200, 0.09, u.kind === "champ" ? "sawtooth" : "square");
+  sfx(u, u.kind === "champ" ? 120 : 200, 0.09, u.kind === "champ" ? "sawtooth" : "square");
 
   if (u.kind === "minion") {
     if (killer && isChamp(killer)) {
       killer.gold += u.M.gold; killer.cs++;
-      if (killer === G.me) blip(1240, 0.07, "triangle", 0.07);       // the last hit, audible
+      sfx(killer, 1240, 0.07, "triangle", 0.07);                       // the last hit, audible
       float(u, "+" + u.M.gold, "#ffc53d");
     }
     grantXp(u.x, u.y, u.M.xp);
@@ -947,9 +1028,9 @@ function die(u, killer) {
   if (u.kind === "turret") {
     const foe = 1 - u.team;
     for (const c of champsOf(foe)) c.gold += TURRET_STATS[u.tier].gold;
-    say(`<b class="${foe ? "cRed" : "cBlue"}">${TEAM_NAME[foe]}</b> destroyed a turret`, "cGold");
-    callout("TURRET DOWN", "#ffc53d");
-    G.cam.shake = 10;
+    shout(`<b class="${foe ? "cRed" : "cBlue"}">${TEAM_NAME[foe]}</b> destroyed a turret`, "cGold");
+    shoutCallout("TURRET DOWN", "#ffc53d");
+    shakeAll(10);
     return;
   }
 
@@ -976,10 +1057,13 @@ function die(u, killer) {
     if (c && isChamp(c) && c !== killer && c.team !== u.team) { c.a++; c.gold += ASSIST_GOLD; }
   }
   u.dmgLog = [];
-  const who = killer && isChamp(killer) ? killer.champ : killer ? "a turret" : "the lane";
-  say(`<b class="${u.team ? "cBlue" : "cRed"}">${who}</b> killed <b class="${u.team ? "cRed" : "cBlue"}">${u.champ}</b>`, u.team === BLUE ? "cHot" : "cSafe");
-  if (u === G.me) { callout("YOU DIED", "#ff2e4d"); G.cam.shake = 14; }
-  else callout("KILL", "#3dff88");
+  const who = !killer ? "the lane" : isChamp(killer) ? killer.champ : killer.kind === "turret" ? "a turret" : "the minions";
+  const line = `<b class="${u.team ? "cBlue" : "cRed"}">${esc(who)}</b> killed <b class="${u.team ? "cRed" : "cBlue"}">${u.champ}</b>`;
+  for (const p of humans()) {
+    tell(p, line, p.team === u.team ? "cHot" : "cSafe");         // bad news is red, good news green — for each player
+    if (p === u) { tellCallout(p, "YOU DIED", "#ff2e4d"); shake(p, 14); }
+    else tellCallout(p, killer === p || NET.role === "solo" ? "KILL" : "ENEMY DOWN", "#3dff88");
+  }
 }
 
 function grantXp(x, y, amount, forced) {
@@ -995,7 +1079,7 @@ function grantXp(x, y, amount, forced) {
       recalc(c, true);
       c.hp += c.maxHp - before; c.mp = Math.min(c.maxMp, c.mp + 60);
       G.fx.push({ kind: "ring", x: c.x, y: c.y, r: c.r, to: c.r + 34, t: 0.5, life: 0.5, color: "#ffc53d", follow: c.id });
-      if (c === G.me) { callout("LEVEL " + c.level, "#ffc53d"); blip(660, 0.1, "triangle"); }
+      tellCallout(c, "LEVEL " + c.level, "#ffc53d"); sfx(c, 660, 0.1, "triangle");
     }
   }
 }
@@ -1038,7 +1122,7 @@ function autoAttack(u, tgt) {
     damage(u, tgt, dmg, "phys");
     G.fx.push({ kind: "slash", x: tgt.x, y: tgt.y, t: 0.14, life: 0.14, color: unitColor(u) });
   }
-  if (u === G.me) blip(300, 0.03, "square", 0.05);
+  if (isChamp(u)) sfx(u, 300, 0.03, "square", 0.05);
 }
 
 function lineShot(u, tx, ty, range, width, dmg, type, opt) {
@@ -1050,7 +1134,7 @@ function lineShot(u, tx, ty, range, width, dmg, type, opt) {
     pierce: !!opt.pierce, slow: opt.slow, stun: opt.stun, hit: new Set(),
     life: range / (opt.speed || 800), trail: true, born: G.clock,
   });
-  blip(520, 0.06, "sine", 0.05);
+  sfx(u, 520, 0.06, "sine", 0.05);
 }
 
 function burst(u, x, y, r, dmg, type, opt) {
@@ -1061,8 +1145,8 @@ function burst(u, x, y, r, dmg, type, opt) {
     if (opt.stun) applyStun(o, opt.stun);
     if (opt.slow) applySlow(o, opt.slow[0], opt.slow[1]);
   }
-  if (opt.shake) G.cam.shake = opt.shake;
-  blip(180, 0.16, "sawtooth", 0.09);
+  if (opt.shake) shake(u, opt.shake);
+  sfx(u, 180, 0.16, "sawtooth", 0.09);
 }
 
 function cone(u, tx, ty, range, halfAngle, dmg, type, opt) {
@@ -1079,7 +1163,7 @@ function cone(u, tx, ty, range, halfAngle, dmg, type, opt) {
     damage(u, o, dmg, type); any = true;
   }
   G.fx.push({ kind: "cone", x: u.x, y: u.y, a, half: halfAngle, range, t: 0.2, life: 0.2, color: opt.color });
-  blip(260, 0.08, "square", 0.07);
+  sfx(u, 260, 0.08, "square", 0.07);
   return any;
 }
 
@@ -1103,14 +1187,20 @@ function blinkTo(u, tx, ty, maxDist) {
   G.fx.push({ kind: "pop", x: u.x, y: u.y, r: u.r, t: 0.25, life: 0.25, color: "#b45bd8" });
   u.x = px; u.y = py; u.path = null; u.order = null;
   G.fx.push({ kind: "ring", x: px, y: py, r: 4, to: u.r + 16, t: 0.25, life: 0.25, color: "#b45bd8" });
-  blip(880, 0.08, "sine", 0.06);
+  sfx(u, 880, 0.08, "sine", 0.06);
 }
 
 function applyStun(u, t) { if (isStruct(u)) return; u.stun = Math.max(u.stun, t); u.path = null; }
 function applySlow(u, amt, t) { if (isStruct(u)) return; if (amt >= u.slow) { u.slow = amt; u.slowT = Math.max(u.slowT, t); } }
 
 function ping(x, y, color) { G.fx.push({ kind: "ring", x, y, r: 6, to: 34, t: 0.3, life: 0.3, color }); }
-function float(u, txt, color) { G.floats.push({ x: u.x + rand(10) - 5, y: u.y - u.r - 4, txt: String(txt), color, t: 0.85, life: 0.85 }); }
+// color "dmg" means "damage": white when your side dealt it, pink when the other side did.
+// It is resolved when drawn, so each player sees their own hits in white.
+function float(u, txt, color, st) {
+  const f = { x: u.x + rand(10) - 5, y: u.y - u.r - 4, txt: String(txt), color, st: st === undefined ? -1 : st, t: 0.85, life: 0.85 };
+  G.floats.push(f);
+  if (NET.role === "host") netQueueFloat(f);
+}
 
 /* ==================================================================== *
  * 10. CASTING
@@ -1153,7 +1243,7 @@ function levelUp(u, i) {
   if (A.ult && u.level < 6 + u.ranks[i] * 5) return false;    // R at 6 / 11 / 16
   if (!A.ult && u.ranks[i] >= Math.ceil(u.level / 2) + 1) return false;
   u.ranks[i]++; u.points--;
-  if (u === G.me) blip(720, 0.07, "triangle", 0.06);
+  sfx(u, 720, 0.07, "triangle", 0.06);
   return true;
 }
 
@@ -1273,7 +1363,8 @@ function stepUnit(u, dt) {
         u.dead = false; u.hp = u.maxHp; u.mp = u.maxMp;
         u.x = FOUNTAIN[u.team].x; u.y = FOUNTAIN[u.team].y;
         u.shieldHp = 0; u.stun = 0; u.slow = 0;
-        if (u === G.me) { G.cam.lock = true; callout("RESPAWNED", "#3dff88"); }
+        tellCallout(u, "RESPAWNED", "#3dff88");
+        if (u === G.me) G.cam.lock = true;
       }
       return;
     }
@@ -1295,7 +1386,8 @@ function stepUnit(u, dt) {
       if (u.recall <= 0) {
         u.x = f.x; u.y = f.y;
         G.fx.push({ kind: "ring", x: u.x, y: u.y, r: 4, to: 46, t: 0.4, life: 0.4, color: TEAM_COLOR[u.team] });
-        if (u === G.me) { G.cam.lock = true; say("Recalled", "cSafe"); }
+        tell(u, "Recalled", "cSafe");
+        if (u === G.me) G.cam.lock = true;
       }
       return;
     }
@@ -1325,7 +1417,7 @@ function stepUnit(u, dt) {
           damage(u, o, u.chargeHit.dmg, "phys");
           applyStun(o, u.chargeHit.stun);
           G.fx.push({ kind: "pop", x: o.x, y: o.y, r: o.r + 6, t: 0.25, life: 0.25, color: "#35c05a" });
-          u.chargeHit = null; u.dash.left = 0; G.cam.shake = 7;
+          u.chargeHit = null; u.dash.left = 0; shake(u, 7);
           break;
         }
       }
@@ -1518,7 +1610,7 @@ function spawnWave() {
     }
     if (siege) makeMinion(team, "siege", x0 - dir * rank * 46, 0);
   }
-  if (siege && G.wave > 1) say(`Wave ${G.wave} — <b>siege</b>`, "cGold");
+  if (siege && G.wave > 1) shout(`Wave ${G.wave} — <b>siege</b>`, "cGold");
 }
 
 /* ==================================================================== *
@@ -1881,7 +1973,7 @@ function draw() {
   const order = [...G.units].sort((a, b) => rank(a) - rank(b));
   for (const u of order) {
     if (u.dead) continue;
-    if (!visibleTo(u, BLUE)) continue;
+    if (!visibleTo(u, viewTeam())) continue;
     drawUnit(u);
   }
 
@@ -1925,7 +2017,7 @@ function fogCanvas(w, h) {
   c.fillRect(0, 0, w, h);
   c.globalCompositeOperation = "destination-out";
   for (const u of G.units) {
-    if (u.team !== BLUE || u.dead) continue;
+    if (u.team !== viewTeam() || u.dead) continue;
     const sx = u.x - G.cam.x, sy = u.y - G.cam.y, r = u.vision;
     if (sx < -r || sy < -r || sx > w + r || sy > h + r) continue;
     const g = c.createRadialGradient(sx, sy, r * 0.55, sx, sy, r);
@@ -1992,10 +2084,10 @@ function drawUnitBody(u) {
     ctx.save();
     ctx.setLineDash([7, 9]);
     ctx.strokeStyle = TEAM_COLOR[u.team];
-    ctx.globalAlpha = near ? (u.team === BLUE ? 0.30 : 0.55) : 0.13;
-    ctx.lineWidth = near && u.team !== BLUE ? 2 : 1;
+    ctx.globalAlpha = near ? (u.team === viewTeam() ? 0.30 : 0.55) : 0.13;
+    ctx.lineWidth = near && u.team !== viewTeam() ? 2 : 1;
     ctx.beginPath(); ctx.arc(u.x, u.y, u.stat.range, 0, 7); ctx.stroke();
-    if (near && u.team !== BLUE) {
+    if (near && u.team !== viewTeam()) {
       ctx.globalAlpha = 0.05; ctx.fillStyle = TEAM_COLOR[u.team];
       ctx.beginPath(); ctx.arc(u.x, u.y, u.stat.range, 0, 7); ctx.fill();
     }
@@ -2064,7 +2156,7 @@ function drawUnitBody(u) {
   ctx.font = `700 ${(11 / G.zoom).toFixed(1)}px ui-monospace, monospace`;
   ctx.textAlign = "center";
   ctx.fillStyle = u === G.me ? "#eceaf4" : "#9b98b4";
-  ctx.fillText(u.champ + " " + u.level, u.x, u.y - u.r - 17);
+  ctx.fillText((NET.role !== "solo" && u.pname ? u.pname : u.champ) + " " + u.level, u.x, u.y - u.r - 17);
   ctx.textAlign = "left";
 }
 
@@ -2074,7 +2166,7 @@ function hpBar(u, w, dy, thin, gold) {
   ctx.fillStyle = "#05050a"; ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
   ctx.fillStyle = "#1a1a26"; ctx.fillRect(x, y, w, h);
   const pct = clamp(u.hp / u.maxHp, 0, 1);
-  ctx.fillStyle = gold ? "#ffc53d" : u.team === BLUE ? "#3dff88" : "#ff2e4d";
+  ctx.fillStyle = gold ? "#ffc53d" : u.team === viewTeam() ? "#3dff88" : "#ff2e4d";
   ctx.fillRect(x, y, w * pct, h);
   if (u.shieldHp > 0) {
     const sw = Math.min(w * (1 - pct), w * (u.shieldHp / u.maxHp));
@@ -2137,10 +2229,10 @@ function drawAim() {
 function drawCasts() {
   for (const u of G.units) {
     if (!u.casting || u.dead || !isChamp(u)) continue;
-    if (!visibleTo(u, BLUE)) continue;
+    if (!visibleTo(u, viewTeam())) continue;
     const A = u.C.abils[u.casting.i];
     const p = 1 - u.casting.t / u.casting.total;
-    const col = u.team === BLUE ? "#4a7bf0" : "#ff2e4d";
+    const col = u.team === viewTeam() ? "#4a7bf0" : "#ff2e4d";
     const a = Math.atan2(u.casting.ty - u.y, u.casting.tx - u.x);
 
     ctx.save();
@@ -2207,7 +2299,7 @@ function drawFloats() {
     const k = 1 - f.t / f.life;
     ctx.globalAlpha = Math.max(0, 1 - k * k);
     ctx.font = `900 ${(14 / G.zoom).toFixed(1)}px Arial Black, Arial, sans-serif`;
-    ctx.fillStyle = f.color;
+    ctx.fillStyle = f.color === "dmg" ? (f.st === viewTeam() ? "#ffffff" : "#ff8a9c") : f.color;
     ctx.fillText(f.txt, f.x, f.y - k * (30 / G.zoom));
   }
   ctx.globalAlpha = 1;
@@ -2226,7 +2318,7 @@ function drawMini() {
   mctx.fillRect(6 * TILE * sx, LANE_TOP * TILE * sy, (MAP_W - 12) * TILE * sx, (LANE_BOT - LANE_TOP + 1) * TILE * sy);
   for (const u of G.units) {
     if (u.dead) continue;
-    if (!visibleTo(u, BLUE)) continue;
+    if (!visibleTo(u, viewTeam())) continue;
     const x = u.x * sx, y = u.y * sy;
     if (isStruct(u)) {
       mctx.fillStyle = TEAM_COLOR[u.team];
@@ -2283,7 +2375,7 @@ const el = {
 };
 
 function setPaused(on) {
-  if (G.phase !== "play") return;
+  if (G.phase !== "play" || NET.role !== "solo") return;
   G.paused = on;
   el.pause.hidden = !on;
   if (on) { G.rmb = false; G.armed = -1; }
@@ -2302,6 +2394,37 @@ function setSpeed(v) {
 }
 for (const b of $("speed").querySelectorAll("button"))
   b.onclick = () => setSpeed(G.speed + 0.1 * Number(b.dataset.d));
+
+// the champions people are driving: you, and — when hosting — your friend
+const humans = () => (G.me ? [G.me, ...(G.bot && G.bot.remote ? [G.bot] : [])] : []);
+function tell(u, html, cls) {
+  if (u === G.me) say(html, cls);
+  else if (u && u.remote) netSendRel({ t: "say", html, cls });
+}
+function tellCallout(u, txt, color) {
+  if (u === G.me) callout(txt, color);
+  else if (u && u.remote) netSendRel({ t: "callout", txt, color });
+}
+function shake(u, n) {
+  if (u === G.me) G.cam.shake = n;
+  else if (u && u.remote) netSendRel({ t: "shake", n });
+}
+const shout = (html, cls) => humans().forEach((p) => tell(p, html, cls));
+const shoutCallout = (txt, color) => humans().forEach((p) => tellCallout(p, txt, color));
+const shakeAll = (n) => humans().forEach((p) => shake(p, n));
+
+// Sound has an owner. A champion is heard by whoever is driving it; a point in the
+// world is heard by everyone who could see it.
+function sfx(who, freq, dur, type, vol) {
+  if (who && who.kind === "champ") {
+    if (who === G.me) blip(freq, dur, type, vol);
+    else if (who.remote) netSendFast({ t: "snd", a: [freq, dur, type, vol] });
+    return;
+  }
+  if (NET.role !== "guest") blip(freq, dur, type, vol);
+  if (NET.role === "host" && G.bot && G.bot.remote && who && seenBy(G.bot.team, who.x, who.y))
+    netSendFast({ t: "snd", a: [freq, dur, type, vol] });
+}
 
 function say(html, cls) {
   const d = document.createElement("div");
@@ -2328,7 +2451,7 @@ function buildAbilityBar() {
       <span class="cd">0</span><span class="up">+</span>
       <span class="pips">${'<s></s>'.repeat(a.ult ? 3 : 5)}</span>`;
     d.title = `${a.name} — ${a.desc}`;
-    d.querySelector(".up").onclick = (e) => { e.stopPropagation(); levelUp(G.me, i); };
+    d.querySelector(".up").onclick = (e) => { e.stopPropagation(); intent({ t: "lvl", i }); };
     d.onclick = () => armAbility(i);
     el.abilities.appendChild(d);
   });
@@ -2421,13 +2544,7 @@ function buildShop() {
 }
 
 function buy(it) {
-  const me = G.me;
-  if (!me.inFountain) { say("You must be in the fountain", "cHot"); return; }
-  if (me.items.length >= 6) { say("No item slots left", "cHot"); return; }
-  if (me.gold < it.price) { say("Not enough gold", "cHot"); return; }
-  me.gold -= it.price; me.items.push(it.id); recalc(me);
-  blip(880, 0.09, "triangle", 0.07);
-  say(`Bought <b>${it.name}</b>`, "cGold");
+  intent({ t: "buy", id: it.id });
   refreshShop();
 }
 
@@ -2485,8 +2602,8 @@ board.addEventListener("mousedown", (e) => {
     if (G.me.dead) return;
     G.rmb = true; G.holdT = 0.12;
     const t = unitUnder(p.x, p.y, 1 - G.me.team);
-    if (t) { orderAttack(G.me, t); clickMark(t.x, t.y, "#ff2e4d"); }
-    else { orderMove(G.me, p.x, p.y, G.pendingAmove); clickMark(p.x, p.y, G.pendingAmove ? "#ffc53d" : "#3dff88"); }
+    if (t) { intent({ t: "atk", id: t.id }); clickMark(t.x, t.y, "#ff2e4d"); }
+    else { intent({ t: "move", x: p.x, y: p.y, am: G.pendingAmove }); clickMark(p.x, p.y, G.pendingAmove ? "#ffc53d" : "#3dff88"); }
     G.pendingAmove = false;
     return;
   }
@@ -2494,11 +2611,11 @@ board.addEventListener("mousedown", (e) => {
   if (e.button === 0) {                       // left click
     if (G.armed >= 0) {
       const i = G.armed; G.armed = -1;
-      if (!tryCast(G.me, i, p.x, p.y)) blip(140, 0.06, "square", 0.05);
+      if (!intent({ t: "cast", i, x: p.x, y: p.y })) blip(140, 0.06, "square", 0.05);
       return;
     }
     if (G.pendingAmove && !G.me.dead) {
-      orderMove(G.me, p.x, p.y, true); clickMark(p.x, p.y, "#ffc53d");
+      intent({ t: "move", x: p.x, y: p.y, am: true }); clickMark(p.x, p.y, "#ffc53d");
       G.pendingAmove = false;
     }
   }
@@ -2518,7 +2635,7 @@ function stepHeldMove(dt) {
   if (G.holdT > 0) return;
   G.holdT = 0.07;
   if (len(G.mouse.x - me.x, G.mouse.y - me.y) < 12) return;
-  orderMove(me, G.mouse.x, G.mouse.y, false);
+  intent({ t: "move", x: G.mouse.x, y: G.mouse.y, am: false, held: true });
 }
 
 // which enemy the next right-click would attack; drawn as a ring and shown in the cursor
@@ -2535,7 +2652,7 @@ function unitUnder(x, y, team) {
   let best = null, bd = 26;
   for (const u of G.units) {
     if (u.dead || u.team !== team) continue;
-    if (!visibleTo(u, BLUE)) continue;
+    if (!visibleTo(u, viewTeam())) continue;
     if (u.kind === "turret" && !turretOpen(u)) continue;
     if (u.kind === "nexus" && !nexusOpen(u.team)) continue;
     const d = len(u.x - x, u.y - y) - u.r;
@@ -2553,8 +2670,74 @@ function castNow(i) {
   if (!checkAbility(i)) return;
   G.armed = -1;
   const a = me.C.abils[i];
-  if (a.aim === "self") tryCast(me, i, me.x, me.y);
-  else tryCast(me, i, G.mouse.x, G.mouse.y);
+  if (a.aim === "self") intent({ t: "cast", i, x: me.x, y: me.y });
+  else intent({ t: "cast", i, x: G.mouse.x, y: G.mouse.y });
+}
+
+/* ==================================================================== *
+ * INTENTS
+ * Everything a player can ask their champion to do goes through here. Solo
+ * and the host apply an intent to the champion directly; a guest sends it
+ * to the host, which applies it to their champion by the very same code.
+ * So the friend's inputs are validated by exactly what validates yours, and
+ * a champion driven over the network cannot do anything you cannot.
+ * ==================================================================== */
+
+const finite = (v) => typeof v === "number" && Number.isFinite(v);
+
+// runs where the simulation runs. Returns whether the intent was accepted.
+function applyIntent(u, c) {
+  if (!u || !c) return false;
+  if (u.dead) return false;
+  switch (c.t) {
+    case "move":
+      if (!finite(c.x) || !finite(c.y)) return false;
+      orderMove(u, clamp(c.x, 0, WORLD_W), clamp(c.y, 0, WORLD_H), !!c.am);
+      return true;
+    case "atk": {
+      const t = G.byId.get(c.id);
+      if (!t || t.dead || t.team === u.team) return false;
+      if (t.kind === "turret" && !turretOpen(t)) return false;         // the shield says "not yet"
+      if (t.kind === "nexus" && !nexusOpen(t.team)) return false;
+      if (isChamp(t) && !visibleTo(t, u.team)) return false;           // you cannot click what you cannot see
+      orderAttack(u, t);
+      return true;
+    }
+    case "stop": orderStop(u); return true;
+    case "cast":
+      if (!Number.isInteger(c.i) || c.i < 0 || c.i > 3) return false;
+      return tryCast(u, c.i, finite(c.x) ? c.x : u.x, finite(c.y) ? c.y : u.y);
+    case "lvl":
+      return Number.isInteger(c.i) && c.i >= 0 && c.i <= 3 && levelUp(u, c.i);
+    case "buy": return buyItem(u, c.id);
+    case "recall": return toggleRecall(u);
+  }
+  return false;
+}
+
+function buyItem(u, id) {
+  const it = ITEM_BY_ID[id];
+  if (!it) return false;
+  if (!u.inFountain) { tell(u, "You must be in the fountain", "cHot"); return false; }
+  if (u.items.length >= 6) { tell(u, "No item slots left", "cHot"); return false; }
+  if (u.gold < it.price) { tell(u, "Not enough gold", "cHot"); return false; }
+  u.gold -= it.price; u.items.push(id); recalc(u);
+  sfx(u, 880, 0.09, "triangle", 0.07);
+  tell(u, `Bought <b>${it.name}</b>`, "cGold");
+  return true;
+}
+
+function toggleRecall(u) {
+  if (u.recall > 0) { u.recall = 0; tell(u, "Recall cancelled"); return true; }
+  if (u.inFountain) { tell(u, "Already home", "cGold"); return false; }
+  u.recall = 5; orderStop(u);
+  return true;
+}
+
+// what the local player's input calls. The guest also predicts the parts it can (see NET).
+function intent(c) {
+  if (NET.role === "guest") return guestIntent(c);
+  return applyIntent(G.me, c);
 }
 
 function armAbility(i) {
@@ -2562,7 +2745,7 @@ function armAbility(i) {
   if (!me || me.dead) return;
   if (!checkAbility(i)) return;
   const a = me.C.abils[i];
-  if (a.aim === "self") { tryCast(me, i, me.x, me.y); return; }
+  if (a.aim === "self") { intent({ t: "cast", i, x: me.x, y: me.y }); return; }
   G.armed = G.armed === i ? -1 : i;
 }
 
@@ -2594,22 +2777,16 @@ window.addEventListener("keydown", (e) => {
   if (k in KEY_ABIL) {
     e.preventDefault();
     const i = KEY_ABIL[k];
-    if (e.ctrlKey || e.metaKey || e.shiftKey) { levelUp(G.me, i); return; }
+    if (e.ctrlKey || e.metaKey || e.shiftKey) { intent({ t: "lvl", i }); return; }
     castNow(i);
     return;
   }
-  if (k === "[") { setSpeed(G.speed - 0.1); say(`Pace ${G.speed.toFixed(1)}\u00d7`, "cGold"); return; }
-  if (k === "]") { setSpeed(G.speed + 0.1); say(`Pace ${G.speed.toFixed(1)}\u00d7`, "cGold"); return; }
+  if (NET.role === "solo" && k === "[") { setSpeed(G.speed - 0.1); say(`Pace ${G.speed.toFixed(1)}\u00d7`, "cGold"); return; }
+  if (NET.role === "solo" && k === "]") { setSpeed(G.speed + 0.1); say(`Pace ${G.speed.toFixed(1)}\u00d7`, "cGold"); return; }
   if (k === "c") { G.showRange = true; return; }
   if (k === "a") { G.pendingAmove = true; G.armed = -1; return; }
-  if (k === "s") { orderStop(G.me); G.armed = -1; return; }
-  if (k === "b") {
-    if (G.me.dead) return;
-    if (G.me.recall > 0) { G.me.recall = 0; say("Recall cancelled"); }
-    else if (G.me.inFountain) say("Already home", "cGold");
-    else { G.me.recall = 5; orderStop(G.me); }
-    return;
-  }
+  if (k === "s") { intent({ t: "stop" }); G.armed = -1; return; }
+  if (k === "b") { if (!G.me.dead) intent({ t: "recall" }); return; }
   if (k === " ") { e.preventDefault(); G.cam.lock = true; return; }
   if (k === "y") { G.cam.lock = !G.cam.lock; say("Camera " + (G.cam.lock ? "locked" : "free"), "cGold"); }
 });
@@ -2665,17 +2842,27 @@ function buildPicks() {
     b.innerHTML = `<div class="dot" style="background:${C.color}"></div>
       <h3>${C.name}</h3><div class="role">${C.role}${C.ranged ? " · ranged" : " · melee"}</div>
       <ul>${C.abils.map((a) => `<li><b>${a.key}</b> ${a.name} — ${a.desc}</li>`).join("")}</ul>`;
-    b.onclick = () => startMatch(key);
+    b.dataset.k = key;
+    b.onclick = () => (NET.mode === "friend" ? selectChamp(key) : startMatch(key));
     el.picks.appendChild(b);
   }
 }
 
-function startMatch(champKey) {
+function resetWorld() {
   G.units.length = 0; G.projs.length = 0; G.zones.length = 0; G.fx.length = 0; G.floats.length = 0;
   G.byId.clear(); G.nextId = 1;
   G.clock = 0; G.wave = 0; G.nextWave = MATCH.firstWave;
-  G.kills = [0, 0]; G.nexusDown = -1; G.armed = -1; G.pendingAmove = false;
+  G.kills = [0, 0]; G.nexusDown = -1; G.armed = -1; G.pendingAmove = false; G.rmb = false;
+  G.paused = false; el.pause.hidden = true;
   G.shopOpen = false; el.shop.hidden = true; el.over.hidden = true; el.feed.innerHTML = "";
+  el.veil.classList.remove("on");
+  NET.lastSeq = 0; NET.seq = 0; NET.snapAcc = 0; NET.fxOut.length = 0; NET.floatsOut.length = 0; NET.projs = new Map();
+}
+
+// `mp`, when given, makes the other champion a friend's rather than the bot's
+function startMatch(champKey, mp) {
+  resetWorld();
+  if (!mp) { NET.role = "solo"; document.body.classList.remove("mp"); }
 
   for (const team of [BLUE, RED]) {
     for (const d of TURRETS[team]) makeTurret(team, d);
@@ -2683,8 +2870,14 @@ function startMatch(champKey) {
   }
 
   G.me = makeChamp(BLUE, champKey, false);
-  const others = CHAMP_KEYS.filter((k) => k !== champKey);
-  G.bot = makeChamp(RED, others[randInt(others.length)], true);
+  if (mp) {
+    G.bot = makeChamp(RED, mp.foe, false, true);
+    G.me.pname = mp.hostName; G.bot.pname = mp.foeName;
+    hookFx();
+  } else {
+    const others = CHAMP_KEYS.filter((k) => k !== champKey);
+    G.bot = makeChamp(RED, others[randInt(others.length)], true);
+  }
 
   G.cam.lock = true;
   G.cam.x = G.me.x - viewW() / 2; G.cam.y = G.me.y - viewH() / 2;
@@ -2696,23 +2889,30 @@ function startMatch(champKey) {
   $("top").classList.remove("off");
   G.phase = "play";
   resize();
-  say(`<b class="cRed">${G.bot.champ}</b> is on the other side`, "cGold");
+  if (mp) say(`You play <b class="cBlue">ORDER</b>. Your base is on the left, <b class="cRed">${esc(mp.foeName)}</b> is on the right.`, "cGold");
+  else say(`<b class="cRed">${G.bot.champ}</b> is on the other side`, "cGold");
   callout("MINIONS IN " + MATCH.firstWave + "s", "#ffc53d");
-  setSpeed(G.speed);
-  say("Too fast or too slow? <b>[</b> and <b>]</b> change the pace any time", "cGold");
+  if (!mp) {
+    setSpeed(G.speed);
+    say("Too fast or too slow? <b>[</b> and <b>]</b> change the pace any time", "cGold");
+  }
   toggleShop(true);                      // you spawn in the fountain: buy your first item
   blip(440, 0.12, "triangle", 0.08);
 }
 
 function finish(winner) {
   G.phase = "over";
-  const won = winner === BLUE;
+  const won = winner === viewTeam();
   el.overTitle.innerHTML = won ? "VICTORY" : "<em>DEFEAT</em>";
   el.overTitle.style.color = won ? "var(--safe)" : "";
   const me = G.me;
   el.overLine.innerHTML =
     `${me.champ} · ${me.k}/${me.d}/${me.a} · ${me.cs} CS · level ${me.level} · ${Math.floor(me.gold)} gold left<br>` +
     `${Math.floor(G.clock / 60)}m ${Math.floor(G.clock % 60)}s · ${TEAM_NAME[BLUE]} ${G.kills[BLUE]} — ${G.kills[RED]} ${TEAM_NAME[RED]}`;
+  const guest = NET.role === "guest";
+  $("rematch").hidden = guest;                  // only the host can start another
+  $("overWait").hidden = !guest;
+  if (NET.role === "host") netSendRel({ t: "end", w: winner });
   el.over.hidden = false;
   el.veil.classList.remove("on");
   G.cam.shake = 18;
@@ -2721,6 +2921,7 @@ function finish(winner) {
 }
 
 function toMenu() {
+  if (NET.side) netClose();
   el.over.hidden = true; el.shop.hidden = true; G.shopOpen = false;
   el.bar.classList.add("hidden");
   $("top").classList.add("off");
@@ -2729,7 +2930,680 @@ function toMenu() {
   G.phase = "menu";
 }
 el.again.onclick = toMenu;
-$("rematch").onclick = () => startMatch(G.me.champ);
+$("rematch").onclick = () => (NET.role === "host" ? startHostMatch() : startMatch(G.me.champ));
+
+/* ==================================================================== *
+ * 22. PLAYING A FRIEND
+ *
+ * Two browsers and no server. They find each other through a code you paste
+ * to one another once (WebRTC), and then talk directly.
+ *
+ * The host's page runs the one true simulation. The friend's page runs none:
+ * it sends what the player wants (the same intents a solo player's clicks
+ * become) and draws what the host says is there. The host only describes
+ * what the friend's side could actually see, so fog of war cannot be cheated
+ * from the browser console.
+ *
+ * Two channels. A reliable one for anything that must arrive (a cast, a
+ * purchase, a message). An unreliable one for the firehose (snapshots, held
+ * movement), where only the newest value matters and retrying an old one
+ * would just add lag.
+ * ==================================================================== */
+
+const NETV = 1;                                   // wire version: both sides must match
+const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }];
+const SNAP_EVERY = 0.05;                          // 20 snapshots a second
+const MINION_TYPES = ["melee", "ranged", "siege"];
+const SOUND_TYPES = ["sine", "square", "sawtooth", "triangle"];
+
+Object.assign(NET, {
+  side: null,                                     // "host" | "guest" while a lobby or match is open
+  pc: null, rel: null, fast: null, open: false, lost: false,
+  rtt: 0, lastRx: 0, pingTimer: 0, simLatency: 0,
+  mode: "solo", champ: store.get("champ", CHAMP_KEYS[0]), name: store.get("name", ""),
+  foeChamp: null, foeName: "",
+  seq: 0, lastSeq: 0, snapAcc: 0, pid: 0, projs: new Map(),
+  fxOut: [], floatsOut: [],
+});
+if (!CHAMPS[NET.champ]) NET.champ = CHAMP_KEYS[0];
+
+/* ---------------- a name is text, never markup ---------------- */
+const cleanName = (s, fallback) => {
+  const t = String(s == null ? "" : s).replace(/[\u0000-\u001f\u007f<>&"']/g, "").trim().slice(0, 14);
+  return t || fallback;
+};
+
+// The host's messages are shown as HTML (they carry <b class="cRed">…</b>). A friend's
+// browser must never trust that: keep only that one tag and turn everything else to text.
+function safeHtml(h) {
+  return String(h).slice(0, 300).split(/(<\/?b(?: class="c[A-Za-z]{2,8}")?>)/)
+    .map((part, i) => (i % 2 ? part : part.replace(/</g, "&lt;").replace(/>/g, "&gt;")))
+    .join("");
+}
+const safeColor = (c, fallback) => (typeof c === "string" && /^#[0-9a-fA-F]{3,8}$/.test(c) ? c : fallback);
+
+/* ---------------- the invite code: JSON, deflated, base64url ---------------- */
+const b64u = (bytes) => {
+  let s = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+};
+const unb64u = (t) => {
+  const b = atob(t.replace(/-/g, "+").replace(/_/g, "/"));
+  const out = new Uint8Array(b.length);
+  for (let i = 0; i < b.length; i++) out[i] = b.charCodeAt(i);
+  return out;
+};
+async function pipeBytes(bytes, stream) {
+  return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer());
+}
+async function encodeCode(obj) {
+  let bytes = new TextEncoder().encode(JSON.stringify(obj)), tag = "r";
+  if (typeof CompressionStream === "function") {
+    try { bytes = await pipeBytes(bytes, new CompressionStream("deflate-raw")); tag = "z"; } catch (e) { /* send it uncompressed */ }
+  }
+  return "DL" + NETV + tag + b64u(bytes);
+}
+async function decodeCode(text) {
+  const t = String(text).replace(/\s+/g, "");
+  if (t.length > 12000) throw new Error("That is too long to be a Dot Legend code.");
+  const m = /^DL(\d+)([rz])([A-Za-z0-9_-]+)$/.exec(t);
+  if (!m) throw new Error("That does not look like a Dot Legend code. Copy the whole thing, starting with DL.");
+  if (+m[1] !== NETV) throw new Error("That code is from a different version of the game.");
+  try {
+    let bytes = unb64u(m[3]);
+    if (m[2] === "z") bytes = await pipeBytes(bytes, new DecompressionStream("deflate-raw"));
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch (e) {
+    throw new Error("That code is damaged. Copy it again, all of it.");
+  }
+}
+
+/* ---------------- making the connection ---------------- */
+function newPeer() {
+  if (typeof RTCPeerConnection !== "function")
+    throw new Error("This browser cannot make direct connections. Try a recent Chrome, Edge, Firefox or Safari.");
+  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  pc.onconnectionstatechange = () => { if (pc.connectionState === "failed") netLost("failed"); };
+  return pc;
+}
+
+// A code has to carry every network address the browser found, so wait for the search to end.
+function gathered(pc, ms) {
+  return new Promise((resolve) => {
+    if (pc.iceGatheringState === "complete") return resolve();
+    let tm = 0;
+    const done = () => { pc.removeEventListener("icegatheringstatechange", chk); clearTimeout(tm); resolve(); };
+    const chk = () => { if (pc.iceGatheringState === "complete") done(); };
+    pc.addEventListener("icegatheringstatechange", chk);
+    tm = setTimeout(done, ms);
+  });
+}
+
+function wireChannel(ch) {
+  ch.onopen = () => { if (NET.rel && NET.fast && NET.rel.readyState === "open" && NET.fast.readyState === "open") netOpened(); };
+  ch.onclose = () => netLost("closed");
+  ch.onmessage = (e) => {
+    NET.lastRx = performance.now();
+    let m;
+    try { m = JSON.parse(e.data); } catch (x) { return; }
+    if (!m || typeof m.t !== "string") return;
+    try { netHandle(m); } catch (x) { console.error("net:", x); }
+  };
+}
+
+async function hostOffer() {
+  netReset();
+  NET.side = "host";
+  const pc = NET.pc = newPeer();
+  NET.rel = pc.createDataChannel("rel", { ordered: true });
+  NET.fast = pc.createDataChannel("fast", { ordered: false, maxRetransmits: 0 });
+  wireChannel(NET.rel); wireChannel(NET.fast);
+  await pc.setLocalDescription(await pc.createOffer());
+  await gathered(pc, NET.gatherMs || 3500);
+  return encodeCode({ type: "offer", sdp: pc.localDescription.sdp });
+}
+
+async function hostAccept(text) {
+  const a = await decodeCode(text);
+  if (a.type !== "answer") throw new Error("That is a host code. Paste the reply your friend sends back.");
+  if (!NET.pc || NET.pc.signalingState !== "have-local-offer") throw new Error("Make a new code first.");
+  await NET.pc.setRemoteDescription({ type: "answer", sdp: String(a.sdp) });
+}
+
+async function guestReply(text) {
+  const o = await decodeCode(text);
+  if (o.type !== "offer") throw new Error("That is a reply, not a host code. Paste the code your friend made when they pressed Host.");
+  netReset();
+  NET.side = "guest";
+  const pc = NET.pc = newPeer();
+  pc.ondatachannel = (e) => {
+    if (e.channel.label === "rel") NET.rel = e.channel; else if (e.channel.label === "fast") NET.fast = e.channel; else return;
+    wireChannel(e.channel);
+  };
+  await pc.setRemoteDescription({ type: "offer", sdp: String(o.sdp) });
+  await pc.setLocalDescription(await pc.createAnswer());
+  await gathered(pc, NET.gatherMs || 3500);
+  return encodeCode({ type: "answer", sdp: pc.localDescription.sdp });
+}
+
+/* ---------------- sending ---------------- */
+function netRaw(ch, msg) {
+  if (!ch || ch.readyState !== "open") return;
+  const data = JSON.stringify(msg);
+  if (NET.simLatency) { setTimeout(() => { if (ch.readyState === "open") ch.send(data); }, NET.simLatency); return; }
+  if (ch === NET.fast && ch.bufferedAmount > 200000) return;       // congested: the next snapshot supersedes this one
+  ch.send(data);
+}
+function netSendRel(msg) { netRaw(NET.rel, msg); }
+function netSendFast(msg) { netRaw(NET.fast, msg); }
+function netQueueFloat(f) { NET.floatsOut.push(f); }
+
+function netOpened() {
+  if (NET.open) return;
+  NET.open = true; NET.lost = false; NET.lastRx = performance.now();
+  clearInterval(NET.pingTimer);
+  NET.pingTimer = setInterval(() => netSendRel({ t: "ping", ts: performance.now() }), 1000);
+  if (NET.side === "guest") {
+    netSendRel({ t: "hello", v: NETV, ch: NET.champ, n: NET.name });
+    setNetStatus("Connected. Waiting for the host to start the match…");
+  } else setNetStatus("Connected. Starting…");
+}
+
+function netReset() {
+  clearInterval(NET.pingTimer);
+  for (const ch of [NET.rel, NET.fast]) if (ch) { ch.onclose = null; ch.onmessage = null; try { ch.close(); } catch (e) { /* already gone */ } }
+  if (NET.pc) { NET.pc.onconnectionstatechange = null; try { NET.pc.close(); } catch (e) { /* already gone */ } }
+  Object.assign(NET, { pc: null, rel: null, fast: null, open: false, lost: false, side: null, role: "solo", rtt: 0,
+    seq: 0, lastSeq: 0, snapAcc: 0, foeChamp: null, pingTimer: 0 });
+  NET.fxOut.length = 0; NET.floatsOut.length = 0; NET.projs = new Map();
+  document.body.classList.remove("mp");
+}
+
+// leaving on purpose: say goodbye first so the other side does not wait for a timeout
+function netClose() {
+  netSendRel({ t: "bye" });
+  setTimeout(netReset, 150);
+}
+
+function netLost(why) {
+  if (NET.lost || !NET.side) return;
+  NET.lost = true;
+  const playing = G.phase === "play" && NET.role !== "solo";
+  clearInterval(NET.pingTimer);
+  if (playing) {
+    G.phase = "over";
+    el.overTitle.innerHTML = "<em>DISCONNECTED</em>"; el.overTitle.style.color = "";
+    el.overLine.innerHTML = why === "bye" ? "Your friend left the match." : "The connection to your friend was lost.";
+    $("rematch").hidden = true; $("overWait").hidden = true;
+    el.over.hidden = false; el.veil.classList.remove("on");
+  } else {
+    setNetStatus(why === "bye" ? "Your friend left." : "The connection failed. Strict networks and some VPNs block direct connections; try again, or from a different network.", true);
+    lobbyReady();
+  }
+}
+
+/* ---------------- receiving ---------------- */
+function netHandle(m) {
+  switch (m.t) {
+    case "ping": netSendRel({ t: "pong", ts: m.ts }); return;
+    case "pong":
+      if (finite(m.ts)) { const r = performance.now() - m.ts; NET.rtt = NET.rtt ? NET.rtt * 0.7 + r * 0.3 : r; }
+      return;
+    case "bye": netLost("bye"); return;
+  }
+  if (NET.side === "host") hostHandle(m);
+  else if (NET.side === "guest") guestHandle(m);
+}
+
+function hostHandle(m) {
+  if (m.t === "hello") {
+    if (G.phase === "play") return;               // a match is already running
+    if (m.v !== NETV) { setNetStatus("Your friend is running a different version of the game.", true); netSendRel({ t: "bye" }); return; }
+    NET.foeChamp = CHAMPS[m.ch] ? m.ch : CHAMP_KEYS[0];
+    NET.foeName = cleanName(m.n, "Guest");
+    startHostMatch();
+    return;
+  }
+  // anything else is an intent from the friend. Same validation as your own clicks get.
+  if (G.phase === "play" && G.bot && G.bot.remote) applyIntent(G.bot, m);
+}
+
+function guestHandle(m) {
+  switch (m.t) {
+    case "start": guestStart(m); return;
+    case "s": if (G.phase === "play" && NET.role === "guest") applySnapshot(m); return;
+    case "say": if (typeof m.html === "string") say(safeHtml(m.html), typeof m.cls === "string" ? m.cls.replace(/[^A-Za-z]/g, "") : ""); return;
+    case "callout": callout(String(m.txt).slice(0, 40), safeColor(m.color, "#ffc53d")); return;
+    case "shake": if (finite(m.n)) G.cam.shake = clamp(m.n, 0, 30); return;
+    case "snd":
+      if (Array.isArray(m.a) && finite(m.a[0]) && finite(m.a[1]) && SOUND_TYPES.includes(m.a[2]))
+        blip(clamp(m.a[0], 40, 4000), clamp(m.a[1], 0.01, 1), m.a[2], finite(m.a[3]) ? clamp(m.a[3], 0, 0.2) : undefined);
+      return;
+    case "end": if (G.phase === "play" && finite(m.w)) finish(m.w === RED ? RED : BLUE); return;
+  }
+}
+
+/* ==================================================================== *
+ * HOST: start the match, then describe the world 20 times a second
+ * ==================================================================== */
+
+function startHostMatch() {
+  NET.role = "host";
+  document.body.classList.add("mp");
+  startMatch(NET.champ, { foe: NET.foeChamp, hostName: cleanName(NET.name, "Host"), foeName: NET.foeName });
+  netSendRel({ t: "start", v: NETV, hc: NET.champ, gc: NET.foeChamp, hn: G.me.pname, gn: G.bot.pname, sp: G.speed });
+}
+
+// every effect the sim spawns is also queued for the friend (and filtered by what they can see)
+function hookFx() {
+  if (G.fx._hooked) return;
+  const raw = G.fx.push.bind(G.fx);
+  G.fx.push = (...a) => { const r = raw(...a); if (NET.role === "host") for (const f of a) NET.fxOut.push(f); return r; };
+  G.fx._hooked = true;
+}
+
+// could anything on `team` see this spot?
+function seenBy(team, x, y) {
+  for (const u of G.units) {
+    if (u.team !== team || u.dead) continue;
+    const dx = u.x - x, dy = u.y - y;
+    if (dx * dx + dy * dy < u.vision * u.vision) return true;
+  }
+  return false;
+}
+
+const r1 = (v) => Math.round(v * 10) / 10;
+const r2 = (v) => Math.round(v * 100) / 100;
+
+function packChamp(u, own) {
+  const c = {
+    id: u.id, tm: u.team, ch: u.champ, x: Math.round(u.x), y: Math.round(u.y), hp: Math.round(u.hp), mh: u.maxHp, lv: u.level,
+    d: u.dead ? 1 : 0, sh: Math.round(u.shieldHp), st: u.stun > 0 ? 1 : 0, rc: r2(u.recall), fc: r2(u.facing || 0),
+    fl: u.hitFlash > 0 ? 1 : 0, dsh: u.dash ? 1 : 0, nm: u.pname,
+  };
+  if (u.casting) c.cast = [u.casting.i, Math.round(u.casting.tx), Math.round(u.casting.ty), r2(u.casting.t), u.casting.total];
+  if (u.lunge) c.lg = [r2(u.lunge.a), u.lunge.amp, r2(u.lunge.t)];
+  if (own) Object.assign(c, {
+    own: 1, mp: Math.round(u.mp), mm: u.maxMp, g: Math.floor(u.gold), pt: u.points, rk: u.ranks, cd: u.cds.map((v) => r1(Math.max(0, v))),
+    it: u.items, k: u.k, dth: u.d, a: u.a, cr: u.cs, fn: u.inFountain ? 1 : 0, rs: r1(Math.max(0, u.respawn)),
+    ad: r1(u.stat.ad), ap: r1(u.stat.ap || 0), ar: r1(u.stat.armor), mr: r1(u.stat.mr), rg: u.stat.range,
+    ms: Math.round(moveSpeed(u)), as: r2(attackSpeed(u)),
+  });
+  return c;
+}
+
+// The world as `team` is allowed to see it.
+function buildSnapshot(team) {
+  const units = [], champs = [];
+  for (const u of G.units) {
+    if (!visibleTo(u, team)) continue;            // structures and your own side always pass
+    if (u.kind === "champ") { champs.push(packChamp(u, u === G.bot)); continue; }
+    const sub = u.kind === "minion" ? MINION_TYPES.indexOf(u.type) : u.kind === "turret" ? u.tier : 0;
+    units.push([u.id, u.kind === "minion" ? 1 : u.kind === "turret" ? 2 : 3, u.team, Math.round(u.x), Math.round(u.y),
+      Math.round(u.hp), u.maxHp, sub, u.hitFlash > 0 ? 1 : 0, u.lunge ? [r2(u.lunge.a), u.lunge.amp, r2(u.lunge.t)] : 0]);
+  }
+  const projs = [];
+  for (const p of G.projs) {
+    if (!seenBy(team, p.x, p.y)) continue;
+    if (!p.nid) p.nid = ++NET.pid;
+    projs.push([p.nid, Math.round(p.x), Math.round(p.y), Math.round(p.vx || 0), Math.round(p.vy || 0), p.team, p.r, p.color,
+      p.big ? 1 : 0, p.homing || 0, p.speed || 0]);
+  }
+  const zones = [];
+  for (const z of G.zones) if (seenBy(team, z.x, z.y)) zones.push([Math.round(z.x), Math.round(z.y), z.r, z.color, z.team]);
+  const fx = NET.fxOut.slice(-60).filter((f) => seenBy(team, f.x, f.y)).slice(-40);           // the newest matter most
+  const floats = NET.floatsOut.slice(-40).filter((f) => seenBy(team, f.x, f.y)).slice(-30);
+  NET.fxOut.length = 0; NET.floatsOut.length = 0;
+  return { t: "s", n: ++NET.seq, c: r2(G.clock), k: G.kills, sp: G.speed, u: units, ch: champs, p: projs, z: zones, e: fx, f: floats };
+}
+
+function netHostTick(dt) {
+  if (!NET.open || !G.bot || !G.bot.remote || G.phase !== "play") { NET.fxOut.length = 0; NET.floatsOut.length = 0; return; }
+  NET.snapAcc += dt;
+  if (NET.snapAcc < SNAP_EVERY) return;
+  NET.snapAcc = 0;
+  netSendFast(buildSnapshot(G.bot.team));
+  NET.fxOut.length = 0; NET.floatsOut.length = 0;   // (the host sees its own effects directly)
+}
+
+/* ==================================================================== *
+ * GUEST: draw what the host says is there
+ * ==================================================================== */
+
+function guestStart(m) {
+  if (m.v !== NETV) { netLost("version"); return; }
+  NET.role = "guest";
+  NET.lastSnap = 0;
+  document.body.classList.add("mp");
+  resetWorld();
+  G.speed = clamp(+m.sp || 1, 0.5, 1.5);
+  G.me = null; G.bot = null; G.phase = "play";
+  NET.foeName = cleanName(m.hn, "Host");
+  el.menu.hidden = true; el.bar.classList.remove("hidden"); $("top").classList.remove("off");
+  resize();
+  buildShop();
+  say(`You play <b class="cRed">CHAOS</b>. Your base is on the right, <b class="cBlue">${esc(NET.foeName)}</b> is on the left.`, "cGold");
+  callout("MINIONS IN " + MATCH.firstWave + "s", "#ffc53d");
+  blip(440, 0.12, "triangle", 0.08);
+}
+
+function mirrorUnit(a) {
+  const [id, kc, team, x, y, hp, mh, sub, fl, lg] = a;
+  let u = G.byId.get(id);
+  if (!u) {
+    u = { id, team, x, y, tx: x, ty: y, hp, maxHp: mh, buffs: [], slow: 0, stun: 0, shieldHp: 0, hitFlash: 0, dmgLog: [], lunge: null };
+    if (kc === 1) {
+      const type = MINION_TYPES[sub] || "melee", M = MINION[type];
+      Object.assign(u, { kind: "minion", type, M, r: M.r, vision: 190,
+        stat: { ad: M.ad, ap: 0, armor: M.armor, mr: 0, ms: M.ms, aspd: M.aspd, range: M.range, lifesteal: 0 } });
+    } else if (kc === 2) {
+      const S = TURRET_STATS[sub] || TURRET_STATS[0];
+      Object.assign(u, { kind: "turret", tier: sub, S, r: 17, vision: 340,
+        stat: { ad: S.ad, ap: 0, armor: S.armor, mr: S.armor, ms: 0, aspd: 0.83, range: S.range, lifesteal: 0 } });
+    } else {
+      Object.assign(u, { kind: "nexus", r: 26, vision: 300,
+        stat: { ad: 0, ap: 0, armor: 25, mr: 25, ms: 0, aspd: 0, range: 0, lifesteal: 0 } });
+    }
+    G.units.push(u); G.byId.set(id, u);
+  }
+  u.tx = x; u.ty = y; u.hp = hp; u.maxHp = mh;
+  if (fl) u.hitFlash = 0.12;
+  if (lg && !u.lunge) u.lunge = { a: lg[0], amp: lg[1], t: lg[2] };
+}
+
+function mirrorChamp(c) {
+  const C = CHAMPS[c.ch];
+  if (!C || !finite(c.id) || !finite(c.x) || !finite(c.y)) return;
+  let u = G.byId.get(c.id);
+  if (!u) {
+    u = { id: c.id, kind: "champ", team: c.tm, champ: c.ch, C, r: C.r, x: c.x, y: c.y, tx: c.x, ty: c.y, ax: c.x, ay: c.y,
+      buffs: [], slow: 0, stun: 0, shieldHp: 0, hitFlash: 0, dmgLog: [], lunge: null, ranks: [0, 0, 0, 0], cds: [0, 0, 0, 0], items: [],
+      stat: { ad: C.ad, ap: 0, armor: C.armor, mr: C.mr, ms: C.ms, aspd: C.aspd, range: C.range, lifesteal: 0 },
+      vision: 360, order: null, path: null, remote: false, bot: false, level: 1, points: 0, gold: 0, mp: 0, maxMp: 1,
+      k: 0, d: 0, a: 0, cs: 0, respawn: 0, recall: 0, casting: null, inFountain: false, pname: "", dead: false };
+    G.units.push(u); G.byId.set(u.id, u);
+  }
+  const wasDead = u.dead, wasLevel = u.level;
+  u.hp = c.hp; u.maxHp = c.mh; u.level = c.lv; u.dead = !!c.d; u.shieldHp = c.sh || 0; u.stun = c.st ? 1 : 0;
+  u.recall = c.rc || 0; u.facing = c.fc; u.dashing = !!c.dsh; u.pname = cleanName(c.nm, "");
+  u.casting = Array.isArray(c.cast) ? { i: c.cast[0], tx: c.cast[1], ty: c.cast[2], t: c.cast[3], total: c.cast[4] } : null;
+  if (c.fl) u.hitFlash = 0.12;
+  if (Array.isArray(c.lg) && !u.lunge) u.lunge = { a: c.lg[0], amp: c.lg[1], t: c.lg[2] };
+
+  if (!c.own) {
+    u.tx = c.x; u.ty = c.y;
+    return;
+  }
+  // our own dot: the full picture, and a position we predict rather than wait for
+  u.mp = c.mp; u.maxMp = c.mm; u.gold = c.g; u.points = c.pt; u.ranks = c.rk; u.cds = c.cd; u.items = c.it;
+  u.k = c.k; u.d = c.dth; u.a = c.a; u.cs = c.cr; u.inFountain = !!c.fn; u.respawn = c.rs;
+  u.stat = { ad: c.ad, ap: c.ap, armor: c.ar, mr: c.mr, ms: c.ms, aspd: c.as, range: c.rg, lifesteal: 0 };
+  u.ax = c.x; u.ay = c.y;
+  if (u.dead || u.stun > 0 || u.casting || u.recall > 0 || u.dashing) { u.order = null; u.path = null; }
+  if (wasDead && !u.dead) G.cam.lock = true;
+  if (!G.me) {
+    G.me = u; u.x = c.x; u.y = c.y;
+    G.cam.lock = true; G.cam.x = u.x - viewW() / 2; G.cam.y = u.y - viewH() / 2;
+    buildAbilityBar();
+    toggleShop(true);                             // you spawn in the fountain: buy your first item
+  }
+  void wasLevel;
+}
+
+function applySnapshot(m) {
+  if (!Array.isArray(m.u) || !Array.isArray(m.ch) || !finite(m.n)) return;
+  if (m.n <= NET.lastSeq) return;                 // the fast channel does not keep order: ignore a late one
+  NET.lastSeq = m.n;
+  NET.lastSnap = performance.now();
+  G.clock = m.c;
+  if (Array.isArray(m.k)) G.kills = [m.k[0] | 0, m.k[1] | 0];
+  if (finite(m.sp)) G.speed = clamp(m.sp, 0.5, 1.5);
+
+  const seen = new Set();
+  for (const a of m.u) if (Array.isArray(a) && finite(a[0])) { seen.add(a[0]); mirrorUnit(a); }
+  for (const c of m.ch) if (c && typeof c === "object") { seen.add(c.id); mirrorChamp(c); }
+  for (let i = G.units.length - 1; i >= 0; i--) {   // whatever the host did not mention has gone (died, or left our sight)
+    const u = G.units[i];
+    if (!seen.has(u.id)) { G.units.splice(i, 1); G.byId.delete(u.id); }
+  }
+
+  // projectiles keep flying on their own between snapshots; a snapshot only corrects them
+  const next = new Map(), list = [];
+  for (const a of Array.isArray(m.p) ? m.p : []) {
+    if (!Array.isArray(a)) continue;
+    const [nid, x, y, vx, vy, team, r, color, big, homing, speed] = a;
+    let p = NET.projs.get(nid);
+    if (p) {
+      if (Math.hypot(p.x - x, p.y - y) > 25) { p.x = x; p.y = y; } else { p.x += (x - p.x) * 0.3; p.y += (y - p.y) * 0.3; }
+      p.vx = vx; p.vy = vy;
+    } else p = { nid, x, y, vx, vy, team, r, color: safeColor(color, "#ffffff"), big: !!big, homing: homing || 0, speed: speed || 0 };
+    next.set(nid, p); list.push(p);
+  }
+  NET.projs = next; G.projs = list;
+  G.zones = (Array.isArray(m.z) ? m.z : []).filter(Array.isArray).map((a) => ({ x: a[0], y: a[1], r: a[2], color: safeColor(a[3], "#b45bd8"), team: a[4], t: 1 }));
+
+  for (const f of Array.isArray(m.e) ? m.e : []) if (f && finite(f.x) && finite(f.y) && finite(f.life)) G.fx.push({ ...f, color: safeColor(f.color, "#ffffff"), t: f.life });
+  for (const f of Array.isArray(m.f) ? m.f : []) if (f && finite(f.x) && finite(f.y) && finite(f.life)) G.floats.push({ ...f, txt: String(f.txt).slice(0, 8), color: f.color === "dmg" ? "dmg" : safeColor(f.color, "#ffffff"), t: f.life });
+}
+
+/* ---------- the guest's frame: no simulation, only smoothing and prediction ---------- */
+
+function guestFrame(dt) {
+  const sdt = dt * G.speed;
+  G.clock += sdt;
+  stepHeldMove(dt);
+  const k = Math.min(1, dt * 18);
+  for (const u of G.units) {
+    if (u.hitFlash > 0) u.hitFlash -= sdt;
+    if (u.lunge) { u.lunge.t -= sdt; if (u.lunge.t <= 0) u.lunge = null; }
+    if (u.casting) u.casting.t = Math.max(0, u.casting.t - sdt);
+    if (u.cds) for (let i = 0; i < 4; i++) if (u.cds[i] > 0) u.cds[i] = Math.max(0, u.cds[i] - sdt);
+    if (u === G.me) continue;
+    if (u.tx === undefined) continue;
+    const dx = u.tx - u.x, dy = u.ty - u.y;
+    if (dx * dx + dy * dy > 22500) { u.x = u.tx; u.y = u.ty; } else { u.x += dx * k; u.y += dy * k; }
+  }
+  predictOwn(dt);
+
+  for (const p of G.projs) {
+    const t = p.homing ? G.byId.get(p.homing) : null;
+    if (t) {
+      const dx = t.x - p.x, dy = t.y - p.y, d = Math.hypot(dx, dy) || 1, step = p.speed * sdt;
+      p.x += dx / d * Math.min(step, d); p.y += dy / d * Math.min(step, d);
+    } else { p.x += (p.vx || 0) * sdt; p.y += (p.vy || 0) * sdt; }
+  }
+  stepFx(sdt);
+  if (G.shopOpen) { refreshShop(); if (G.me && !G.me.inFountain) toggleShop(false); }
+}
+
+// Move our own dot the instant a click lands instead of a round trip later. The host still
+// decides; we only guess the part we can know: a straight walk to a point, or to a target.
+function predictOwn(dt) {
+  const me = G.me;
+  if (!me) return;
+  const sdt = dt * G.speed;
+  const free = !me.dead && me.stun <= 0 && !me.casting && !me.dashing && me.recall <= 0;
+  let moving = false;
+  if (free && me.order) {
+    const o = me.order;
+    if (o.kind === "move") {
+      moving = true;
+      if (followPath(me, sdt)) { me.order = null; me.holdUntil = performance.now() + 350; }
+    } else if (o.kind === "attack") {
+      const t = G.byId.get(o.id);
+      if (!t || t.dead) me.order = null;
+      else if (!inRange(me, t)) {
+        moving = true;
+        me.repath = (me.repath || 0) - dt;
+        if (!me.path || !me.path.length || me.repath <= 0) { me.path = findPath(me.x, me.y, t.x, t.y) || null; me.repath = 0.3; }
+        followPath(me, sdt);
+      }
+    }
+    // attack-move is left to the host: it stops to fight, and we cannot know when
+  }
+  const ex = me.ax - me.x, ey = me.ay - me.y, e = Math.hypot(ex, ey);
+  if (e > 250) { me.x = me.ax; me.y = me.ay; return; }                     // a blink, a recall, a respawn: snap
+  if (!moving) {
+    if (performance.now() < (me.holdUntil || 0) && e < 24) return;         // we arrived first; let the host catch up
+    const k = Math.min(1, dt * 14); me.x += ex * k; me.y += ey * k;
+  } else if (e > 60) { const k = Math.min(1, dt * 7); me.x += ex * k; me.y += ey * k; }   // we guessed wrong: ease back
+}
+
+// the guest's intents: predict what we can, and tell the host what we want
+function guestIntent(c) {
+  const me = G.me;
+  if (!me) return false;
+  const send = c.held ? netSendFast : netSendRel;
+  switch (c.t) {
+    case "move":
+      if (me.dead || !finite(c.x) || !finite(c.y)) return false;
+      send({ t: "move", x: Math.round(c.x), y: Math.round(c.y), am: !!c.am });
+      orderMove(me, clamp(c.x, 0, WORLD_W), clamp(c.y, 0, WORLD_H), !!c.am);
+      return true;
+    case "atk": {
+      const t = G.byId.get(c.id);
+      if (me.dead || !t) return false;
+      netSendRel({ t: "atk", id: c.id });
+      orderAttack(me, t);
+      return true;
+    }
+    case "stop": netSendRel({ t: "stop" }); orderStop(me); return true;
+    case "cast":
+      if (!Number.isInteger(c.i) || !canCast(me, c.i)) return false;
+      netSendRel({ t: "cast", i: c.i, x: Math.round(c.x), y: Math.round(c.y) });
+      me.order = null; me.path = null;
+      return true;
+    case "lvl": case "buy": case "recall":
+      netSendRel(c);
+      return true;
+  }
+  return false;
+}
+
+// ping in the top strip, for both players
+function updateYou() {
+  $("youBlue").hidden = viewTeam() !== BLUE;
+  $("youRed").hidden = viewTeam() !== RED;
+}
+function updatePing() {
+  const p = $("ping");
+  if (!p) return;
+  const ms = NET.rtt ? Math.round(NET.rtt) : 0;
+  p.textContent = ms ? ms + " ms" : "…";
+  p.className = ms === 0 ? "" : ms < 90 ? "good" : ms < 180 ? "warn" : "bad";
+}
+
+// The host's tab runs the match: if it is in the background the browser stops it, and to the
+// friend that looks like a frozen game. Say so instead of leaving them guessing.
+function updateLagBanner() {
+  const quiet = NET.role === "guest" && G.phase === "play" && NET.lastSnap && performance.now() - NET.lastSnap > 1500;
+  $("lag").hidden = !quiet;
+}
+
+// no word from the other side for too long
+function netWatchdog() {
+  if (NET.side && NET.open && !NET.lost && performance.now() - NET.lastRx > 9000) netLost("timeout");
+}
+
+/* ==================================================================== *
+ * THE LOBBY
+ * ==================================================================== */
+
+function setNetStatus(text, isErr) {
+  const s = $("netStatus");
+  if (!s) return;
+  s.textContent = text || "";
+  s.className = "tag" + (isErr ? " err" : "");
+}
+function lobbyReady() {
+  for (const id of ["btnHost", "btnJoin", "btnConnect", "btnReply"]) { const b = $(id); if (b) b.disabled = false; }
+}
+function selectChamp(key) {
+  NET.champ = key; store.set("champ", key);
+  for (const b of el.picks.children) b.classList.toggle("sel", b.dataset.k === key);
+}
+function setMode(m) {
+  NET.mode = m;
+  for (const b of $("modeSeg").children) b.setAttribute("aria-checked", String(b.dataset.m === m));
+  $("soloBits").hidden = m !== "solo";
+  $("friendPanel").hidden = m !== "friend";
+  for (const b of el.picks.children) b.classList.toggle("sel", m === "friend" && b.dataset.k === NET.champ);
+  if (m === "solo") { netReset(); resetLobbyUi(); }
+}
+function resetLobbyUi() {
+  $("hostFlow").hidden = true; $("joinFlow").hidden = true;
+  $("hostCode").value = ""; $("hostReply").value = ""; $("joinCode").value = ""; $("joinReply").value = "";
+  setNetStatus(""); lobbyReady();
+}
+function myName() {
+  NET.name = cleanName($("pname").value, "");
+  store.set("name", NET.name);
+  return NET.name;
+}
+async function copyText(ta, btn) {
+  ta.focus(); ta.select();
+  let ok = false;
+  const pp = document.permissionsPolicy;
+  const mayUseClipboard = !pp || !pp.allowsFeature || pp.allowsFeature("clipboard-write");
+  if (mayUseClipboard) { try { await navigator.clipboard.writeText(ta.value); ok = true; } catch (e) { /* fall back below */ } }
+  if (!ok) { try { ok = document.execCommand("copy"); } catch (x) { /* the button will say to press Ctrl+C */ } }
+  const was = btn.textContent;
+  btn.textContent = ok ? "Copied" : "Press Ctrl+C";
+  setTimeout(() => { btn.textContent = was; }, 1600);
+}
+// run a step, put the message on screen if it fails, and never leave a button dead
+async function step(btn, working, fn) {
+  btn.disabled = true; setNetStatus(working);
+  try { await fn(); } catch (e) { setNetStatus(e && e.message ? e.message : String(e), true); btn.disabled = false; return false; }
+  return true;
+}
+
+function initLobby() {
+  $("pname").value = NET.name;
+  for (const b of $("modeSeg").children) b.onclick = () => setMode(b.dataset.m);
+
+  $("btnHost").onclick = () => {
+    resetLobbyUi(); myName();
+    $("hostFlow").hidden = false;
+    step($("btnHost"), "Making your code…", async () => {
+      $("hostCode").value = await hostOffer();
+      $("hostCode").focus(); $("hostCode").select();
+      $("hostStep2").hidden = false;
+      setNetStatus("Send the code to your friend. When they send a reply back, paste it below.");
+      $("btnHost").disabled = false;
+    });
+  };
+  $("copyHost").onclick = () => copyText($("hostCode"), $("copyHost"));
+  $("btnConnect").onclick = () => step($("btnConnect"), "Connecting…", async () => {
+    await hostAccept($("hostReply").value);
+    setNetStatus("Connecting to your friend…");
+    setTimeout(() => { if (NET.side === "host" && !NET.open && G.phase !== "play") { setNetStatus("Still not connected. Check the reply was pasted whole, or try again on a different network.", true); lobbyReady(); } }, 25000);
+  });
+
+  $("btnJoin").onclick = () => {
+    resetLobbyUi(); myName();
+    $("joinFlow").hidden = false;
+    $("joinCode").focus();
+    setNetStatus("Paste the code your friend made.");
+  };
+  $("btnReply").onclick = () => step($("btnReply"), "Making your reply…", async () => {
+    myName();
+    $("joinReply").value = await guestReply($("joinCode").value);
+    $("joinStep2").hidden = false;
+    $("joinReply").focus(); $("joinReply").select();
+    setNetStatus("Send this reply back to your friend, then wait here. The match starts by itself.");
+    $("btnReply").disabled = false;
+  });
+  $("copyJoin").onclick = () => copyText($("joinReply"), $("copyJoin"));
+  for (const id of ["hostCode", "joinReply"]) $(id).onfocus = () => $(id).select();
+
+  if (typeof RTCPeerConnection !== "function") {
+    $("btnHost").disabled = true; $("btnJoin").disabled = true;
+    setNetStatus("This browser cannot make direct connections. Try a recent Chrome, Edge, Firefox or Safari.", true);
+  }
+  setInterval(netWatchdog, 1000);
+}
 
 /* ==================================================================== *
  * 20. LOOP
@@ -2744,7 +3618,7 @@ const TIPS = [
     text: "You have a skill point: press <b>Ctrl+Q</b> to learn your first spell." },
   { id: "hit",   when: () => G.units.some((u) => u.kind === "minion" && u.team === RED && len(u.x - G.me.x, u.y - G.me.y) < 420),
     text: "<b>Right-click</b> a minion to attack it. When one <b>glows gold</b>, your next hit kills it — that is what pays." },
-  { id: "foe",   when: () => G.bot && !G.bot.dead && visibleTo(G.bot, BLUE) && len(G.bot.x - G.me.x, G.bot.y - G.me.y) < 560,
+  { id: "foe",   when: () => G.bot && !G.bot.dead && visibleTo(G.bot, viewTeam()) && len(G.bot.x - G.me.x, G.bot.y - G.me.y) < 560,
     text: "Their spells draw a shape on the ground before they land. <b>Step off it.</b>" },
 ];
 function coach() {
@@ -2758,15 +3632,22 @@ function coach() {
   }
 }
 
+// the purely visual timers; a guest, which runs no simulation, still runs these
+function stepFx(dt) {
+  for (let i = G.fx.length - 1; i >= 0; i--) { G.fx[i].t -= dt; if (G.fx[i].t <= 0) G.fx.splice(i, 1); }
+  for (let i = G.floats.length - 1; i >= 0; i--) { G.floats[i].t -= dt; if (G.floats[i].t <= 0) G.floats.splice(i, 1); }
+  if (G.clickFx) G.clickFx.t -= dt;
+}
+
 function stepGame(dt) {
   G.clock += dt;
   G.tipT = (G.tipT || 0) - dt;
-  if (G.tipT <= 0 && G.auto !== true) { G.tipT = 1; coach(); }
+  if (G.tipT <= 0 && G.auto !== true && NET.role === "solo") { G.tipT = 1; coach(); }
 
   if (G.clock >= G.nextWave) { spawnWave(); G.nextWave += MATCH.waveEvery; }
 
   for (const u of G.units) stepUnit(u, dt);
-  if (G.bot && G.phase === "play") botThink(G.bot, dt);
+  if (G.bot && G.bot.bot && G.phase === "play") botThink(G.bot, dt);       // a friend's champion has no AI
   if (G.auto && G.me && G.phase === "play") botThink(G.me, dt);   // attract mode / demo
   separate();
   stepProjectiles(dt);
@@ -2780,9 +3661,7 @@ function stepGame(dt) {
     }
   }
 
-  for (let i = G.fx.length - 1; i >= 0; i--) { G.fx[i].t -= dt; if (G.fx[i].t <= 0) G.fx.splice(i, 1); }
-  for (let i = G.floats.length - 1; i >= 0; i--) { G.floats[i].t -= dt; if (G.floats[i].t <= 0) G.floats.splice(i, 1); }
-  if (G.clickFx) G.clickFx.t -= dt;
+  stepFx(dt);
 
   if (G.shopOpen) {
     refreshShop();
@@ -2800,14 +3679,23 @@ function frame(ts) {
   if (board.clientWidth !== G.view.w || board.clientHeight !== G.view.h) resize();
 
   syncMouse();
-  if (G.phase === "play" && !G.shopOpen && !G.paused) { stepHeldMove(dt); stepGame(dt * G.speed); }
-  if (G.phase !== "menu") {
+  if (G.phase === "play") {
+    if (NET.role === "guest") guestFrame(dt);
+    // shopping stops the clock only when nobody is waiting for you
+    else if (!G.paused && (NET.role !== "solo" || !G.shopOpen)) {
+      stepHeldMove(dt);
+      stepGame(dt * G.speed);
+      if (NET.role === "host") netHostTick(dt);
+    }
+  }
+  if (G.phase !== "menu" && G.me) {
     camUpdate(dt);
     syncMouse();
     updateHover();
     draw();
     drawMini();
     updateHud();
+    if (NET.role !== "solo") { updatePing(); updateLagBanner(); updateYou(); }
   }
 
   if (calloutT > 0) {
@@ -2820,6 +3708,7 @@ function frame(ts) {
 
 buildDiff();
 buildPicks();
+initLobby();
 setSpeed(G.speed);
 resize();
 requestAnimationFrame(frame);
@@ -2831,13 +3720,13 @@ requestAnimationFrame(frame);
  * ==================================================================== */
 
 window.DotLegend = {
-  version: "0.1.0",
+  version: "0.2.0",
   champions: CHAMP_KEYS,
   start: (champ) => startMatch(champ || CHAMP_KEYS[0]),
   // hand your own dot to the lane AI — the dot world can run this as an attract screen
   autoplay: (on) => { G.auto = on !== false; return G.auto; },
   state: () => ({
-    phase: G.phase, clock: G.clock, kills: [...G.kills],
+    phase: G.phase, mode: NET.role, clock: G.clock, kills: [...G.kills],
     me: G.me && { champ: G.me.champ, level: G.me.level, k: G.me.k, d: G.me.d, a: G.me.a, cs: G.me.cs, gold: Math.floor(G.me.gold) },
   }),
   // the dot world can listen for the result without owning the game
