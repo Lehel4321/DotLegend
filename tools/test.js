@@ -292,6 +292,86 @@ const ok = (name, cond, note) => {
     return p.evaluate(() => G.diff === "easy");
   })());
 
+  // ---------------------------------------------------------------- on a phone
+  {
+    const pc = await b.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+    const t = await pc.newPage();
+    t.on("pageerror", (e) => errs.push(e.message));
+    t.on("console", (m) => { if (m.type() === "error") errs.push(m.text()); });
+    await t.goto(url);
+    await t.evaluate(() => localStorage.clear());
+    await t.reload();
+    await t.waitForTimeout(250);
+    await t.tap("#picks .pick:nth-child(1)");
+    await t.waitForTimeout(300);
+    await t.tap("#shopBtn");
+    await t.waitForTimeout(150);
+    ok("phone: the shop button is on screen, and closes the shop", await t.evaluate(() => !G.shopOpen));
+    ok("phone: the whole HUD fits the width", await t.evaluate(() =>
+      [...document.querySelectorAll("#bar *")].every((e) => { const r = e.getBoundingClientRect(); return !r.width || r.right <= innerWidth + 0.5; })));
+    const m0 = await t.evaluate(() => ({ x: G.me.x, y: G.me.y }));
+    await t.touchscreen.tap(330, 300);
+    await t.waitForTimeout(700);
+    ok("phone: tapping the board moves your dot", await t.evaluate((m) => Math.hypot(G.me.x - m.x, G.me.y - m.y) > 20, m0));
+    await t.keyboard.press("Control+q");
+    await t.tap("#abilities .ab:nth-child(1)");
+    ok("phone: tapping an ability arms it", await t.evaluate(() => G.armed === 0));
+    await t.touchscreen.tap(330, 300);
+    await t.waitForTimeout(100);
+    ok("phone: the next tap aims it instead of walking", await t.evaluate(() => G.armed === -1 && G.me.cds[0] > 0));
+    // ---- the menu button: a finger has no Esc
+    const mb = await t.evaluate(() => { const r = document.getElementById("menuBtn").getBoundingClientRect();
+      const cs = getComputedStyle(document.getElementById("menuBtn"));
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return { shown: cs.display !== "none", l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height,
+        vw: innerWidth, vh: innerHeight, hit: hit && hit.id }; });
+    ok("phone: the menu button exists, is on screen and is a finger-sized target",
+      mb.shown && mb.l >= 0 && mb.t >= 0 && mb.r <= mb.vw && mb.b <= mb.vh && mb.w >= 40 && mb.h >= 40 && mb.hit === "menuBtn");
+    ok("phone: the shop hint speaks touch, not keyboard", await t.evaluate(() =>
+      !/\bP\b/.test(document.getElementById("shopBtn").textContent) && G.me.inFountain
+      && /tap/i.test(document.getElementById("stateLine").textContent)));
+    await t.tap("#menuBtn");
+    await t.waitForTimeout(100);
+    ok("phone: the menu button opens the pause menu and stops the game", await t.evaluate(() => G.paused && !document.getElementById("pause").hidden));
+    const clk = await t.evaluate(() => G.clock); await t.waitForTimeout(300);
+    ok("...and nothing moves behind it", await t.evaluate((c) => G.clock === c, clk));
+    await t.tap("#resume");
+    ok("phone: Resume closes it", await t.evaluate(() => !G.paused && document.getElementById("pause").hidden));
+    await t.tap("#menuBtn");
+    await t.tap("#quit");
+    await t.waitForTimeout(100);
+    ok("phone: Back to champion select leaves the match", await t.evaluate(() => G.phase === "menu" && !G.paused && document.getElementById("pause").hidden
+      && getComputedStyle(document.getElementById("menuBtn")).display !== "none" && document.getElementById("top").classList.contains("off")));
+    await pc.close();
+
+    // a 320px phone: the button must not run off the edge or sit on the score
+    const sc = await b.newContext({ viewport: { width: 320, height: 568 }, hasTouch: true, isMobile: true });
+    const s = await sc.newPage();
+    s.on("pageerror", (e) => errs.push(e.message));
+    s.on("console", (m) => { if (m.type() === "error") errs.push(m.text()); });
+    await s.goto(url); await s.evaluate(() => localStorage.clear()); await s.reload(); await s.waitForTimeout(250);
+    await s.tap("#picks .pick:nth-child(1)"); await s.waitForTimeout(300);
+    ok("small phone: the menu button is on screen and clear of the score", await s.evaluate(() => {
+      const r = document.getElementById("menuBtn").getBoundingClientRect();
+      const red = document.querySelector(".score.red").getBoundingClientRect();
+      return r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight && red.right <= r.left; }));
+    await sc.close();
+  }
+
+  // ---------------------------------------------------------------- on a desktop nothing changes
+  {
+    const dc = await b.newContext({ viewport: { width: 1280, height: 800 } });
+    const d = await dc.newPage();
+    d.on("pageerror", (e) => errs.push(e.message));
+    d.on("console", (m) => { if (m.type() === "error") errs.push(m.text()); });
+    await d.goto(url); await d.evaluate(() => localStorage.clear()); await d.reload(); await d.waitForTimeout(250);
+    await d.click("#picks .pick:nth-child(1)"); await d.waitForTimeout(300);
+    ok("desktop: no menu button, and the shop hint still names the keys", await d.evaluate(() =>
+      getComputedStyle(document.getElementById("menuBtn")).display === "none"
+      && /P/.test(document.getElementById("shopBtn").textContent) && /press P/.test(document.getElementById("stateLine").textContent)));
+    await dc.close();
+  }
+
   ok("no runtime errors", errs.length === 0);
   if (errs.length) console.log(errs.slice(0, 5).join("\n"));
   await b.close();

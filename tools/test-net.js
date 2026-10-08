@@ -247,6 +247,24 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   ok("a rematch restarts both, still connected", true);
   ok("...with a clean slate", await B.evaluate(() => G.kills[0] === 0 && G.kills[1] === 0 && G.me.items.length === 0));
 
+  // ---------------------------------------------------------------- a phone has no Esc: the menu button is the way out
+  await B.setViewportSize({ width: 390, height: 844 });
+  await B.evaluate(() => setTouch(true));
+  await B.waitForTimeout(150);
+  ok("touch, with a friend: the menu button is on screen", await B.evaluate(() => {
+    const r = document.getElementById("menuBtn").getBoundingClientRect();
+    return r.width >= 40 && r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight; }));
+  if (await B.evaluate(() => G.shopOpen)) await B.click("#shopBtn");    // the shop opens at spawn and sits over the strip
+  await B.click("#menuBtn");
+  ok("...it opens a menu, but the match keeps running (the clock cannot stop for one of two)", await B.evaluate(() => !document.getElementById("pause").hidden && !G.paused));
+  const c0 = await B.evaluate(() => G.clock); await sleep(400);
+  ok("...the clock still ticks behind it", await B.evaluate((c) => G.clock > c, c0));
+  await B.click("#resume");
+  ok("...Keep playing closes it", await B.evaluate(() => document.getElementById("pause").hidden));
+  await B.click("#menuBtn");
+  await B.click("#quit");
+  ok("...Back to champion select leaves the match", await B.evaluate(() => G.phase === "menu" && document.getElementById("pause").hidden));
+
   // ---------------------------------------------------------------- someone leaves
   await B.close();
   await until(A, () => G.phase === "over" && /DISCONNECTED/.test(document.getElementById("overTitle").textContent), null, 20000);
