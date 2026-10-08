@@ -292,6 +292,36 @@ const ok = (name, cond, note) => {
     return p.evaluate(() => G.diff === "easy");
   })());
 
+  // ---------------------------------------------------------------- on a phone
+  {
+    const pc = await b.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+    const t = await pc.newPage();
+    t.on("pageerror", (e) => errs.push(e.message));
+    t.on("console", (m) => { if (m.type() === "error") errs.push(m.text()); });
+    await t.goto(url);
+    await t.evaluate(() => localStorage.clear());
+    await t.reload();
+    await t.waitForTimeout(250);
+    await t.tap("#picks .pick:nth-child(1)");
+    await t.waitForTimeout(300);
+    await t.tap("#shopBtn");
+    await t.waitForTimeout(150);
+    ok("phone: the shop button is on screen, and closes the shop", await t.evaluate(() => !G.shopOpen));
+    ok("phone: the whole HUD fits the width", await t.evaluate(() =>
+      [...document.querySelectorAll("#bar *")].every((e) => { const r = e.getBoundingClientRect(); return !r.width || r.right <= innerWidth + 0.5; })));
+    const m0 = await t.evaluate(() => ({ x: G.me.x, y: G.me.y }));
+    await t.touchscreen.tap(330, 300);
+    await t.waitForTimeout(700);
+    ok("phone: tapping the board moves your dot", await t.evaluate((m) => Math.hypot(G.me.x - m.x, G.me.y - m.y) > 20, m0));
+    await t.keyboard.press("Control+q");
+    await t.tap("#abilities .ab:nth-child(1)");
+    ok("phone: tapping an ability arms it", await t.evaluate(() => G.armed === 0));
+    await t.touchscreen.tap(330, 300);
+    await t.waitForTimeout(100);
+    ok("phone: the next tap aims it instead of walking", await t.evaluate(() => G.armed === -1 && G.me.cds[0] > 0));
+    await pc.close();
+  }
+
   ok("no runtime errors", errs.length === 0);
   if (errs.length) console.log(errs.slice(0, 5).join("\n"));
   await b.close();

@@ -33,7 +33,7 @@
 
   #stage { height: 100dvh; display: flex; flex-direction: column; }
   #frame { position: relative; flex: 1; min-height: 0; line-height: 0; }
-  #board { display: block; width: 100%; height: 100%; cursor: crosshair; }
+  #board { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
 
   /* the faint scanline the dot world wears */
   #scan {
@@ -303,7 +303,14 @@
   #veil b { font-family: var(--display); font-size: 62px; color: var(--hot); line-height: 1; }
 
   @media (max-width: 720px) {
-    #items, #stats { display: none; }
+    #items, #stats, #itemsCell, #statsCell, #miniCell { display: none; }
+    /* the bar is wider than a phone: two rows, with the shop button next to your health
+       and abilities + pace underneath, so nothing is pushed off the right edge */
+    #bar { flex-wrap: wrap; gap: 6px 8px; padding: 6px 8px; }
+    #vitals { order: 1; flex: 1 1 100px; min-width: 0; max-width: none; }
+    #shopCell { order: 2; }
+    #abCell { order: 3; }
+    #speedCell { order: 4; margin-left: auto; }
     .ab { width: 42px; height: 42px; }
     #portrait { width: 46px; height: 46px; }
   }
@@ -444,9 +451,9 @@
       <div class="lbl" id="stateLine">&nbsp;</div>
     </div>
 
-    <div class="cell"><div class="lbl">Abilities</div><div id="abilities"></div></div>
-    <div class="cell"><div class="lbl">Items</div><div id="items"></div></div>
-    <div class="cell">
+    <div class="cell" id="abCell"><div class="lbl">Abilities</div><div id="abilities"></div></div>
+    <div class="cell" id="itemsCell"><div class="lbl">Items</div><div id="items"></div></div>
+    <div class="cell" id="shopCell">
       <div class="lbl">Gold</div>
       <button id="shopBtn"><b id="shopBtnGold">500</b><span>SHOP · P</span></button>
     </div>
@@ -458,8 +465,8 @@
         <button data-d="1" title="Faster ( ] )">+</button>
       </div>
     </div>
-    <div class="cell"><div id="stats"></div></div>
-    <div class="cell"><canvas id="mini" width="248" height="56"></canvas></div>
+    <div class="cell" id="statsCell"><div id="stats"></div></div>
+    <div class="cell" id="miniCell"><canvas id="mini" width="248" height="56"></canvas></div>
   </div>
 </div>
 
@@ -2591,12 +2598,26 @@ function syncMouse() {
 }
 board.addEventListener("mousemove", setMouseScreen);
 
-board.addEventListener("mousedown", (e) => {
+// A finger has no right button. Touching the board does what a right click does
+// (move / attack, and dragging steers), unless an ability is armed: then it aims it.
+board.addEventListener("pointerdown", (e) => {
+  if (e.pointerType !== "touch") return;
+  e.preventDefault();                         // no emulated mouse events on top of this one
+  if (G.phase !== "play" || !G.me || G.paused) return;
+  boardPress(e, G.armed >= 0 ? 0 : 2);
+});
+board.addEventListener("pointermove", (e) => { if (e.pointerType === "touch") setMouseScreen(e); });
+for (const ev of ["pointerup", "pointercancel"])
+  board.addEventListener(ev, (e) => { if (e.pointerType === "touch") G.rmb = false; });
+
+board.addEventListener("mousedown", (e) => boardPress(e, e.button));
+
+function boardPress(e, button) {
   if (G.phase !== "play" || !G.me || G.paused) return;
   setMouseScreen(e);
   const p = { x: G.mouse.x, y: G.mouse.y };
 
-  if (e.button === 2) {                       // right click
+  if (button === 2) {                         // right click
     e.preventDefault();
     if (G.armed >= 0) { G.armed = -1; return; }
     if (G.me.dead) return;
@@ -2608,7 +2629,7 @@ board.addEventListener("mousedown", (e) => {
     return;
   }
 
-  if (e.button === 0) {                       // left click
+  if (button === 0) {                       // left click
     if (G.armed >= 0) {
       const i = G.armed; G.armed = -1;
       if (!intent({ t: "cast", i, x: p.x, y: p.y })) blip(140, 0.06, "square", 0.05);
@@ -2619,7 +2640,7 @@ board.addEventListener("mousedown", (e) => {
       G.pendingAmove = false;
     }
   }
-});
+}
 
 function clickMark(x, y, color) { G.clickFx = { x, y, color, t: 0.4 }; }
 
