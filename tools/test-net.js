@@ -145,6 +145,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await B.keyboard.press("Control+q");
   await until(A, () => G.bot.ranks[0] === 1, null, 3000);
   ok("a skill point spent by the friend is spent on the host", true);
+  // the friend's own client checks the rank before it sends a cast, so wait for the snapshot that brings it back
+  await until(B, () => G.me.ranks[0] === 1, null, 3000);
+  ok("...and shows up on their screen", true);
   await B.evaluate(() => { G.me.cds = [0, 0, 0, 0]; });
   const mpBefore = await B.evaluate(() => G.me.mp);
   await B.mouse.move(box.l + box.w / 2 - 150, box.t + box.h / 2);
