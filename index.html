@@ -2383,8 +2383,10 @@ function setPaused(on) {
 $("resume").onclick = () => setPaused(false);
 $("quit").onclick = () => { setPaused(false); toMenu(); };
 // looking away is a pause: a fight should never be lost to a notification
-window.addEventListener("blur", () => { if (G.phase === "play" && !G.shopOpen) setPaused(true); });
-document.addEventListener("visibilitychange", () => { if (document.hidden && G.phase === "play") setPaused(true); });
+window.addEventListener("blur", () => { releaseHeld(); if (G.phase === "play" && !G.shopOpen) setPaused(true); });
+document.addEventListener("visibilitychange", () => { if (document.hidden) { releaseHeld(); if (G.phase === "play") setPaused(true); } });
+// the keyup / mouseup for a held input goes to whatever window has focus, so it never arrives after alt-tab
+function releaseHeld() { G.showRange = false; G.rmb = false; }
 el.shopBtn.onclick = () => toggleShop();
 
 function setSpeed(v) {
