@@ -292,6 +292,15 @@ const ok = (name, cond, note) => {
     return p.evaluate(() => G.diff === "easy");
   })());
 
+  // holding C (range rings) and then alt-tabbing away must not leave the rings stuck on
+  await fresh(1);
+  await p.keyboard.press("Escape");
+  await p.keyboard.down("c");
+  ok("holding C shows the range rings", await p.evaluate(() => G.showRange));
+  await p.evaluate(() => window.dispatchEvent(new Event("blur")));
+  ok("losing focus while C is held lets go of it (no keyup ever arrives)", await p.evaluate(() => !G.showRange));
+  await p.keyboard.up("c");
+
   ok("no runtime errors", errs.length === 0);
   if (errs.length) console.log(errs.slice(0, 5).join("\n"));
   await b.close();
