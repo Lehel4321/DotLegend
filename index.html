@@ -2758,7 +2758,12 @@ function checkAbility(i) {
 
 const KEY_ABIL = { q: 0, w: 1, e: 2, r: 3 };
 
+// letters typed into a box are text, not commands: a player called "Sam" should not mute the game.
+// Only outside a match, so a lobby box that kept focus after it was hidden can never eat a spell key.
+const typing = (e) => e.target instanceof HTMLElement && (e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName));
+
 window.addEventListener("keydown", (e) => {
+  if (G.phase !== "play" && typing(e)) return;
   const k = e.key.toLowerCase();
   if (k === "m") { G.muted = !G.muted; say(G.muted ? "Muted" : "Unmuted", "cGold"); return; }
   if (G.phase !== "play" || !G.me) return;

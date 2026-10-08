@@ -211,7 +211,7 @@ Neither is needed to play. Both drive the real page in a real browser.
 
 ```
 npm i playwright
-node tools/test.js        # 46 checks on controls and feel
+node tools/test.js        # 48 checks on controls and feel
 node tools/test-net.js    # two browsers playing each other (~60s)
 node tools/simulate.js    # how dangerous the bot is at each difficulty (~90s)
 ```

@@ -292,6 +292,14 @@ const ok = (name, cond, note) => {
     return p.evaluate(() => G.diff === "easy");
   })());
 
+  await p.click("#modeSeg [data-m=friend]");
+  await p.click("#pname");
+  await p.keyboard.type("Sam");
+  ok("typing a name with an M in it does not mute the game", await p.evaluate(() => !G.muted && document.getElementById("pname").value === "Sam"));
+  await p.evaluate(() => document.activeElement.blur());
+  await p.keyboard.press("m");
+  ok("...while M outside a text box still does", await p.evaluate(() => G.muted));
+
   ok("no runtime errors", errs.length === 0);
   if (errs.length) console.log(errs.slice(0, 5).join("\n"));
   await b.close();
