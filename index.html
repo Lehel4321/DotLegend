@@ -302,6 +302,20 @@
   #veil.on { display: flex; }
   #veil b { font-family: var(--display); font-size: 62px; color: var(--hot); line-height: 1; }
 
+  /* the menu button: a finger has no Esc key. Touch devices only; desktop keeps the strip as it was */
+  #menuBtn { display: none; }
+  body.touch #menuBtn {
+    display: flex; align-items: center; justify-content: center; position: absolute; top: 3px; right: 6px;
+    width: 44px; height: 44px; padding: 0; pointer-events: auto; cursor: pointer; z-index: 2;
+    background: rgba(7,7,13,0.78); border: 1px solid var(--edge); color: var(--ink);
+    font-family: var(--display); font-size: 17px; letter-spacing: 0; line-height: 1;
+  }
+  body.touch #menuBtn:active { border-color: var(--gold); color: var(--gold); }
+  body.touch #feed { top: 52px; }
+  /* keep the score strip clear of the button, even with a friend's tag and ping in it */
+  body.touch #top { padding: 0 56px 0 6px; gap: 10px; }
+  @media (max-width: 420px) { body.touch #top { font-size: 9.5px; letter-spacing: 0.06em; gap: 7px; } body.touch #top b { font-size: 13px; } }
+
   @media (max-width: 720px) {
     #items, #stats, #itemsCell, #statsCell, #miniCell { display: none; }
     /* the bar is wider than a phone: two rows, with the shop button next to your health
@@ -326,6 +340,7 @@
       <span id="clock">0:00</span>
       <span id="pingWrap">· <b id="ping">…</b></span>
       <span class="score red"><em class="you" id="youRed" hidden>you</em><b id="sRed">0</b>CHAOS <i></i></span>
+      <button id="menuBtn" aria-label="Pause menu" title="Pause menu">&#9776;</button>
     </div>
 
     <div id="lag" hidden>No news from the host. If they switched tabs, the match waits for them.</div>
@@ -415,8 +430,8 @@
     <!-- ------------ pause ------------ -->
     <div class="screen" id="pause" hidden>
       <div class="sheet">
-        <h2>Paused</h2>
-        <p class="tag">Nothing moves while this is open</p>
+        <h2 id="pauseTitle">Paused</h2>
+        <p class="tag" id="pauseLine">Nothing moves while this is open</p>
         <button class="go" id="resume">Resume</button>
         <button class="ghost" id="quit">Back to champion select</button>
       </div>
@@ -455,7 +470,7 @@
     <div class="cell" id="itemsCell"><div class="lbl">Items</div><div id="items"></div></div>
     <div class="cell" id="shopCell">
       <div class="lbl">Gold</div>
-      <button id="shopBtn"><b id="shopBtnGold">500</b><span>SHOP · P</span></button>
+      <button id="shopBtn"><b id="shopBtnGold">500</b><span id="shopBtnKey">SHOP · P</span></button>
     </div>
     <div class="cell" id="speedCell">
       <div class="lbl">Pace</div>
@@ -2387,8 +2402,39 @@ function setPaused(on) {
   el.pause.hidden = !on;
   if (on) { G.rmb = false; G.armed = -1; }
 }
-$("resume").onclick = () => setPaused(false);
-$("quit").onclick = () => { setPaused(false); toMenu(); };
+
+// Touch devices: there is no Esc and no P, so the screen has to say it and offer the same doors.
+const touchQuery = window.matchMedia ? window.matchMedia("(pointer: coarse)") : null;
+function setTouch(on) {
+  if (document.body.classList.contains("touch") === on) return;
+  document.body.classList.toggle("touch", on);
+  $("shopBtnKey").textContent = on ? "SHOP" : "SHOP \u00b7 P";
+}
+const isTouch = () => document.body.classList.contains("touch");
+setTouch(!!(touchQuery && touchQuery.matches));
+if (touchQuery && touchQuery.addEventListener) touchQuery.addEventListener("change", (e) => setTouch(e.matches));
+// a hybrid laptop reports a mouse until the first finger lands
+window.addEventListener("pointerdown", (e) => { if (e.pointerType === "touch") setTouch(true); }, { capture: true, passive: true });
+
+// The menu button opens what Esc opens. With a friend the clock cannot stop, so there it is a
+// way out, not a pause: the match runs on behind it.
+function openMenu() {
+  if (G.phase !== "play") return;
+  if (NET.role === "solo") { setPaused(true); return; }
+  $("pauseTitle").textContent = "Menu";
+  $("pauseLine").textContent = "The match keeps running";
+  $("resume").textContent = "Keep playing";
+  el.pause.hidden = false;
+}
+function closeMenu() {
+  el.pause.hidden = true;
+  $("pauseTitle").textContent = "Paused";
+  $("pauseLine").textContent = "Nothing moves while this is open";
+  $("resume").textContent = "Resume";
+}
+$("menuBtn").onclick = openMenu;
+$("resume").onclick = () => { setPaused(false); closeMenu(); };
+$("quit").onclick = () => { setPaused(false); closeMenu(); toMenu(); };
 // looking away is a pause: a fight should never be lost to a notification
 window.addEventListener("blur", () => { if (G.phase === "play" && !G.shopOpen) setPaused(true); });
 document.addEventListener("visibilitychange", () => { if (document.hidden && G.phase === "play") setPaused(true); });
@@ -2515,7 +2561,7 @@ function updateHud() {
   let line = "&nbsp;";
   if (me.dead) line = `<span style="color:var(--hot)">DEAD — ${me.respawn.toFixed(1)}s</span>`;
   else if (me.recall > 0) line = `<span style="color:var(--blue)">RECALLING ${me.recall.toFixed(1)}s</span>`;
-  else if (me.inFountain) line = `<span style="color:var(--safe)">FOUNTAIN — press P to shop</span>`;
+  else if (me.inFountain) line = `<span style="color:var(--safe)">FOUNTAIN — ${isTouch() ? "tap SHOP" : "press P to shop"}</span>`;
   else if (me.points > 0) line = `<span style="color:var(--gold)">${me.points} SKILL POINT${me.points > 1 ? "S" : ""} — ctrl+Q/W/E/R</span>`;
   el.stateLine.innerHTML = line;
 
@@ -2568,7 +2614,7 @@ function refreshShop() {
 function toggleShop(force) {
   const open = force === undefined ? !G.shopOpen : force;
   if (open && (!G.me || !G.me.inFountain)) {
-    say("The shop is in your fountain — press <b>B</b> to recall", "cHot");
+    say(isTouch() ? "The shop is in your fountain" : "The shop is in your fountain — press <b>B</b> to recall", "cHot");
     return;
   }
   G.shopOpen = open;
@@ -2786,6 +2832,7 @@ window.addEventListener("keydown", (e) => {
 
   if (k === "escape") {
     if (G.paused) { setPaused(false); return; }
+    if (!el.pause.hidden) { closeMenu(); return; }
     if (G.shopOpen) { toggleShop(false); return; }
     if (G.armed >= 0 || G.pendingAmove) { G.armed = -1; G.pendingAmove = false; return; }
     setPaused(true);
@@ -2874,7 +2921,7 @@ function resetWorld() {
   G.byId.clear(); G.nextId = 1;
   G.clock = 0; G.wave = 0; G.nextWave = MATCH.firstWave;
   G.kills = [0, 0]; G.nexusDown = -1; G.armed = -1; G.pendingAmove = false; G.rmb = false;
-  G.paused = false; el.pause.hidden = true;
+  G.paused = false; closeMenu();
   G.shopOpen = false; el.shop.hidden = true; el.over.hidden = true; el.feed.innerHTML = "";
   el.veil.classList.remove("on");
   NET.lastSeq = 0; NET.seq = 0; NET.snapAcc = 0; NET.fxOut.length = 0; NET.floatsOut.length = 0; NET.projs = new Map();
@@ -2922,7 +2969,7 @@ function startMatch(champKey, mp) {
 }
 
 function finish(winner) {
-  G.phase = "over";
+  G.phase = "over"; closeMenu();
   const won = winner === viewTeam();
   el.overTitle.innerHTML = won ? "VICTORY" : "<em>DEFEAT</em>";
   el.overTitle.style.color = won ? "var(--safe)" : "";
@@ -2943,7 +2990,7 @@ function finish(winner) {
 
 function toMenu() {
   if (NET.side) netClose();
-  el.over.hidden = true; el.shop.hidden = true; G.shopOpen = false;
+  el.over.hidden = true; el.shop.hidden = true; G.shopOpen = false; closeMenu();
   el.bar.classList.add("hidden");
   $("top").classList.add("off");
   el.veil.classList.remove("on");
@@ -3153,7 +3200,7 @@ function netLost(why) {
   const playing = G.phase === "play" && NET.role !== "solo";
   clearInterval(NET.pingTimer);
   if (playing) {
-    G.phase = "over";
+    G.phase = "over"; closeMenu();
     el.overTitle.innerHTML = "<em>DISCONNECTED</em>"; el.overTitle.style.color = "";
     el.overLine.innerHTML = why === "bye" ? "Your friend left the match." : "The connection to your friend was lost.";
     $("rematch").hidden = true; $("overWait").hidden = true;
